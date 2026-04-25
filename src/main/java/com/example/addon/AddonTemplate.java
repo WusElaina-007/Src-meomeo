@@ -2,6 +2,7 @@ package com.example.addon;
 
 import com.example.addon.modules.HighPing;
 import com.example.addon.modules.PearlPredict;
+import com.example.addon.modules.StructureFinder;
 import com.example.addon.modules.StudentAura;
 import com.mojang.logging.LogUtils;
 import meteordevelopment.meteorclient.addons.GithubRepo;
@@ -22,6 +23,7 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new HighPing());
         Modules.get().add(new StudentAura());
         Modules.get().add(new PearlPredict());
+        Modules.get().add(new StructureFinder());
     }
 
     @Override
