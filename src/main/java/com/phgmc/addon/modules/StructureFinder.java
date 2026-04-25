@@ -52,15 +52,15 @@ public class StructureFinder extends Module {
         JUNGLE_PYRAMID  ("Kim tự tháp rừng",           32,  8, 14357619,  false, Dimension.Overworld,  80),
         SWAMP_HUT       ("Nhà phù thuỷ",               32,  8, 14357620,  false, Dimension.Overworld,  62),
         IGLOO           ("Nhà băng (Igloo)",           32,  8, 14357618,  false, Dimension.Overworld,  70),
-        OCEAN_MONUMENT  ("Tượng đài đại dương",        32,  5, 10387313,  false, Dimension.Overworld,  40),
-        WOODLAND_MANSION("Biệt thự rừng",              80, 20, 10387319,  false, Dimension.Overworld,  90),
+        OCEAN_MONUMENT  ("Tượng đài đại dương",        32,  5, 10387313,  true,  Dimension.Overworld,  40),
+        WOODLAND_MANSION("Biệt thự rừng",              80, 20, 10387319,  true,  Dimension.Overworld,  90),
         SHIPWRECK       ("Tàu đắm",                    24,  4, 165745295, false, Dimension.Overworld,  50),
         RUINED_PORTAL_OW("Cổng đổ nát (Overworld)",    40, 15, 34222645,  false, Dimension.Overworld,  60),
-        ANCIENT_CITY    ("Thành phố cổ (Deep Dark)",   24,  8, 20083232,  true,  Dimension.Overworld, -51),
-        TRIAL_CHAMBERS  ("Buồng thử thách",            34,  8, 94251327,  true,  Dimension.Overworld, -20),
+        ANCIENT_CITY    ("Thành phố cổ (Deep Dark)",   24,  8, 20083232,  false, Dimension.Overworld, -51),
+        TRIAL_CHAMBERS  ("Buồng thử thách",            34, 12, 94251327,  false, Dimension.Overworld, -20),
         NETHER_FORTRESS ("Lâu đài Nether",             27,  4, 30084232,  false, Dimension.Nether,     65),
         BASTION_REMNANT ("Bastion Remnant",            27,  4, 30084232,  false, Dimension.Nether,     45),
-        RUINED_PORTAL_N ("Cổng đổ nát (Nether)",       25, 10, 34222647,  false, Dimension.Nether,     40),
+        RUINED_PORTAL_N ("Cổng đổ nát (Nether)",       40, 15, 34222645,  false, Dimension.Nether,     40),
         END_CITY        ("End City",                   20, 11, 10387313,  true,  Dimension.End,        75);
 
         public final String label;
