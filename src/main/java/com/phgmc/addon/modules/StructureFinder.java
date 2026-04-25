@@ -12,6 +12,7 @@ import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.waypoints.Waypoint;
 import meteordevelopment.meteorclient.systems.waypoints.Waypoints;
+import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.meteorclient.utils.world.Dimension;
@@ -43,35 +44,39 @@ public class StructureFinder extends Module {
     // ─── Danh sách công trình ────────────────────────────────────────────────
 
     public enum Kind {
-        VILLAGE         ("Làng",                       34, 8,  10387312,  false, Dimension.Overworld),
-        PILLAGER_OUTPOST("Đài Pillager",               32, 8,  165745296, false, Dimension.Overworld),
-        DESERT_PYRAMID  ("Kim tự tháp sa mạc",         32, 8,  14357617,  false, Dimension.Overworld),
-        JUNGLE_PYRAMID  ("Kim tự tháp rừng",           32, 8,  14357619,  false, Dimension.Overworld),
-        SWAMP_HUT       ("Nhà phù thuỷ",               32, 8,  14357620,  false, Dimension.Overworld),
-        IGLOO           ("Nhà băng (Igloo)",           32, 8,  14357618,  false, Dimension.Overworld),
-        OCEAN_MONUMENT  ("Tượng đài đại dương",        32, 5,  10387313,  false, Dimension.Overworld),
-        WOODLAND_MANSION("Biệt thự rừng",              80, 20, 10387319,  false, Dimension.Overworld),
-        SHIPWRECK       ("Tàu đắm",                    24, 4,  165745295, false, Dimension.Overworld),
-        RUINED_PORTAL_OW("Cổng đổ nát (Overworld)",    40, 15, 34222645,  false, Dimension.Overworld),
-        ANCIENT_CITY    ("Thành phố cổ (Deep Dark)",   24, 8,  20083232,  true,  Dimension.Overworld),
-        TRIAL_CHAMBERS  ("Buồng thử thách",            34, 8,  94251327,  true,  Dimension.Overworld),
-        NETHER_FORTRESS ("Lâu đài Nether",             27, 4,  30084232,  false, Dimension.Nether),
-        BASTION_REMNANT ("Bastion Remnant",            27, 4,  30084232,  false, Dimension.Nether),
-        RUINED_PORTAL_N ("Cổng đổ nát (Nether)",       25, 10, 34222647,  false, Dimension.Nether),
-        END_CITY        ("End City",                   20, 11, 10387313,  true,  Dimension.End);
+        //                label                          spc sep salt       tri  dim                  knownY
+        VILLAGE         ("Làng",                       34,  8, 10387312,  false, Dimension.Overworld,  72),
+        PILLAGER_OUTPOST("Đài Pillager",               32,  8, 165745296, false, Dimension.Overworld,  80),
+        DESERT_PYRAMID  ("Kim tự tháp sa mạc",         32,  8, 14357617,  false, Dimension.Overworld,  65),
+        JUNGLE_PYRAMID  ("Kim tự tháp rừng",           32,  8, 14357619,  false, Dimension.Overworld,  80),
+        SWAMP_HUT       ("Nhà phù thuỷ",               32,  8, 14357620,  false, Dimension.Overworld,  62),
+        IGLOO           ("Nhà băng (Igloo)",           32,  8, 14357618,  false, Dimension.Overworld,  70),
+        OCEAN_MONUMENT  ("Tượng đài đại dương",        32,  5, 10387313,  false, Dimension.Overworld,  40),
+        WOODLAND_MANSION("Biệt thự rừng",              80, 20, 10387319,  false, Dimension.Overworld,  90),
+        SHIPWRECK       ("Tàu đắm",                    24,  4, 165745295, false, Dimension.Overworld,  50),
+        RUINED_PORTAL_OW("Cổng đổ nát (Overworld)",    40, 15, 34222645,  false, Dimension.Overworld,  60),
+        ANCIENT_CITY    ("Thành phố cổ (Deep Dark)",   24,  8, 20083232,  true,  Dimension.Overworld, -51),
+        TRIAL_CHAMBERS  ("Buồng thử thách",            34,  8, 94251327,  true,  Dimension.Overworld, -20),
+        NETHER_FORTRESS ("Lâu đài Nether",             27,  4, 30084232,  false, Dimension.Nether,     65),
+        BASTION_REMNANT ("Bastion Remnant",            27,  4, 30084232,  false, Dimension.Nether,     45),
+        RUINED_PORTAL_N ("Cổng đổ nát (Nether)",       25, 10, 34222647,  false, Dimension.Nether,     40),
+        END_CITY        ("End City",                   20, 11, 10387313,  true,  Dimension.End,        75);
 
         public final String label;
         public final int spacing, separation, salt;
         public final boolean triangular;
         public final Dimension dimension;
+        /** Approximate Y level where this structure typically generates. Used for disc rendering. */
+        public final int knownY;
 
-        Kind(String label, int spacing, int separation, int salt, boolean triangular, Dimension dimension) {
+        Kind(String label, int spacing, int separation, int salt, boolean triangular, Dimension dimension, int knownY) {
             this.label = label;
             this.spacing = spacing;
             this.separation = separation;
             this.salt = salt;
             this.triangular = triangular;
             this.dimension = dimension;
+            this.knownY = knownY;
         }
     }
 
@@ -104,9 +109,21 @@ public class StructureFinder extends Module {
 
     // ─── Render settings ────────────────────────────────────────────────────
 
-    private final Setting<Boolean> esp = sgRender.add(new BoolSetting.Builder()
-        .name("esp-3d")
-        .description("Vẽ box ESP 3D tại mỗi công trình tìm được.")
+    private final Setting<Boolean> marker = sgRender.add(new BoolSetting.Builder()
+        .name("đánh-dấu")
+        .description("Vẽ chấm vằng (ô phẳng) tại vị trí công trình — kể cả dưới lòng đất.")
+        .defaultValue(true)
+        .build());
+
+    private final Setting<Integer> markerSize = sgRender.add(new IntSetting.Builder()
+        .name("kích-thước-chấm")
+        .description("Bán kính ô đánh dấu (block). Càng lớn càng dễ thấy từ xa.")
+        .defaultValue(8).min(2).sliderMin(2).sliderMax(32)
+        .build());
+
+    private final Setting<Boolean> beam = sgRender.add(new BoolSetting.Builder()
+        .name("cột-sáng")
+        .description("Vẽ cột sáng từ mặt đất lên trời để nhìn từ xa.")
         .defaultValue(true)
         .build());
 
@@ -123,15 +140,21 @@ public class StructureFinder extends Module {
         .defaultValue(true)
         .build());
 
+    private final Setting<Boolean> chatDump = sgRender.add(new BoolSetting.Builder()
+        .name("in-toạ-độ-ra-chat")
+        .description("Sau mỗi lần quét, in danh sách công trình gần nhất ra chat để đối chiếu.")
+        .defaultValue(true)
+        .build());
+
     private final Setting<SettingColor> colorSide = sgRender.add(new ColorSetting.Builder()
         .name("màu-nền")
-        .description("Màu nền box ESP.")
-        .defaultValue(new SettingColor(180, 80, 255, 60))
+        .description("Màu nền chấm (có alpha).")
+        .defaultValue(new SettingColor(180, 80, 255, 120))
         .build());
 
     private final Setting<SettingColor> colorLine = sgRender.add(new ColorSetting.Builder()
         .name("màu-viền")
-        .description("Màu viền box ESP.")
+        .description("Màu viền và cột sáng.")
         .defaultValue(new SettingColor(220, 120, 255, 255))
         .build());
 
@@ -247,7 +270,25 @@ public class StructureFinder extends Module {
         found.clear();
         found.addAll(results);
 
-        if (mc != null) mc.execute(this::applyWaypoints);
+        if (mc != null) mc.execute(() -> {
+            applyWaypoints();
+            if (chatDump.get()) dumpFoundToChat();
+        });
+    }
+
+    private void dumpFoundToChat() {
+        if (found.isEmpty()) {
+            ChatUtils.info("Tìm-Công-Trình: không tìm thấy công trình nào trong bán kính.");
+            return;
+        }
+        int show = Math.min(found.size(), 10);
+        ChatUtils.info("Tìm-Công-Trình: tìm thấy %d — %d gần nhất:", found.size(), show);
+        for (int i = 0; i < show; i++) {
+            Found f = found.get(i);
+            ChatUtils.info("  %s §7@§f %d §7/§f %d §7/§f %d  §8(%dm, %s)",
+                f.kind.label, f.blockX, f.kind.knownY, f.blockZ,
+                (int) f.distance, f.kind.dimension);
+        }
     }
 
     private static ChunkPos getStartChunk(long seed, Kind k, int regionX, int regionZ) {
@@ -287,7 +328,7 @@ public class StructureFinder extends Module {
             Waypoint wp = new Waypoint.Builder()
                 .name(WP_PREFIX + fs.kind.label + " (" + (int) fs.distance + "m)")
                 .icon("diamond")
-                .pos(new BlockPos(fs.blockX, 64, fs.blockZ))
+                .pos(new BlockPos(fs.blockX, fs.kind.knownY, fs.blockZ))
                 .dimension(fs.kind.dimension)
                 .build();
             wps.add(wp);
@@ -298,24 +339,53 @@ public class StructureFinder extends Module {
 
     @EventHandler
     private void onRender(Render3DEvent event) {
-        if (!esp.get() || found.isEmpty() || mc.player == null) return;
+        if (found.isEmpty() || mc.player == null) return;
+        if (!marker.get() && !beam.get()) return;
 
         Color side = colorSide.get();
         Color line = colorLine.get();
-
-        // Only render structures in current dimension
         Dimension cur = currentDimension();
-        double py = mc.player.getY();
+        int sz = markerSize.get();
 
         for (Found fs : found) {
             if (fs.kind.dimension != cur) continue;
-            double yLo = py - 3;
-            double yHi = py + 30;
-            event.renderer.box(
-                fs.blockX - 8, yLo, fs.blockZ - 8,
-                fs.blockX + 8, yHi, fs.blockZ + 8,
-                side, line, shape.get(), 0);
+
+            double cx = fs.blockX + 0.5;
+            double cz = fs.blockZ + 0.5;
+            double y  = fs.kind.knownY;
+
+            if (marker.get()) {
+                // Filled horizontal marker disc (actually a square) at structure Y
+                event.renderer.sideHorizontal(
+                    cx - sz, y, cz - sz,
+                    cx + sz, cz + sz,
+                    side, line, shape.get());
+                // Second, smaller highlight square for a "dot" feel
+                int inner = Math.max(1, sz / 2);
+                event.renderer.sideHorizontal(
+                    cx - inner, y + 0.02, cz - inner,
+                    cx + inner, cz + inner,
+                    brighter(side), line, shape.get());
+            }
+
+            if (beam.get()) {
+                // Vertical beam from below-world to sky, visible from afar
+                double yLo = -64, yHi = 320;
+                event.renderer.line(cx, yLo, cz, cx, yHi, cz, line);
+                event.renderer.line(cx + 0.3, yLo, cz, cx + 0.3, yHi, cz, line);
+                event.renderer.line(cx - 0.3, yLo, cz, cx - 0.3, yHi, cz, line);
+                event.renderer.line(cx, yLo, cz + 0.3, cx, yHi, cz + 0.3, line);
+                event.renderer.line(cx, yLo, cz - 0.3, cx, yHi, cz - 0.3, line);
+            }
         }
+    }
+
+    private static Color brighter(Color c) {
+        return new Color(
+            Math.min(255, c.r + 60),
+            Math.min(255, c.g + 60),
+            Math.min(255, c.b + 60),
+            Math.min(255, c.a + 40));
     }
 
     private Dimension currentDimension() {
