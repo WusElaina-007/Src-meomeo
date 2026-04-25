@@ -45,6 +45,7 @@ public class StructureFinder extends Module {
 
     public enum Kind {
         //                label                          spc sep salt       tri  dim                  knownY
+        STRONGHOLD      ("Stronghold (thành ngầm)",      0,  0, 0,         false, Dimension.Overworld,  20, true),
         VILLAGE         ("Làng",                       34,  8, 10387312,  false, Dimension.Overworld,  72),
         PILLAGER_OUTPOST("Đài Pillager",               32,  8, 165745296, false, Dimension.Overworld,  80),
         DESERT_PYRAMID  ("Kim tự tháp sa mạc",         32,  8, 14357617,  false, Dimension.Overworld,  65),
@@ -68,8 +69,14 @@ public class StructureFinder extends Module {
         public final Dimension dimension;
         /** Approximate Y level where this structure typically generates. Used for disc rendering. */
         public final int knownY;
+        /** If true this Kind uses ConcentricRings placement instead of RandomSpread (Stronghold). */
+        public final boolean concentricRings;
 
         Kind(String label, int spacing, int separation, int salt, boolean triangular, Dimension dimension, int knownY) {
+            this(label, spacing, separation, salt, triangular, dimension, knownY, false);
+        }
+
+        Kind(String label, int spacing, int separation, int salt, boolean triangular, Dimension dimension, int knownY, boolean concentricRings) {
             this.label = label;
             this.spacing = spacing;
             this.separation = separation;
@@ -77,6 +84,7 @@ public class StructureFinder extends Module {
             this.triangular = triangular;
             this.dimension = dimension;
             this.knownY = knownY;
+            this.concentricRings = concentricRings;
         }
     }
 
@@ -197,7 +205,7 @@ public class StructureFinder extends Module {
 
     private static boolean defaultEnabled(Kind k) {
         return switch (k) {
-            case END_CITY, ANCIENT_CITY, WOODLAND_MANSION,
+            case STRONGHOLD, END_CITY, ANCIENT_CITY, WOODLAND_MANSION,
                  OCEAN_MONUMENT, NETHER_FORTRESS, BASTION_REMNANT,
                  VILLAGE, TRIAL_CHAMBERS -> true;
             default -> false;
@@ -244,6 +252,22 @@ public class StructureFinder extends Module {
 
         for (Kind k : Kind.values()) {
             if (!kindEnabled.get(k).get()) continue;
+
+            if (k.concentricRings) {
+                for (ChunkPos cp : calculateStrongholds(seed)) {
+                    int bx = cp.x * 16 + 8;
+                    int bz = cp.z * 16 + 8;
+                    double dx = bx - playerX;
+                    double dz = bz - playerZ;
+                    double dist = Math.sqrt(dx * dx + dz * dz);
+                    if (dist <= r) {
+                        results.add(new Found(k, bx, bz, dist));
+                    }
+                }
+                if (epoch != scanEpoch) return;
+                continue;
+            }
+
             int regionRadius = Math.max(1, (r / 16) / k.spacing + 1);
             int regionCX = Math.floorDiv(centerCX, k.spacing);
             int regionCZ = Math.floorDiv(centerCZ, k.spacing);
@@ -289,6 +313,47 @@ public class StructureFinder extends Module {
                 f.kind.label, f.blockX, f.kind.knownY, f.blockZ,
                 (int) f.distance, f.kind.dimension);
         }
+    }
+
+    /**
+     * Reimplements {@code ConcentricRingsStructurePlacement.calculatePositions}
+     * with vanilla stronghold parameters (distance=32, spread=3, count=128).
+     * Returns the ~128 nominal stronghold chunks for the given seed; the
+     * actual in-world position is snapped to the nearest valid biome chunk,
+     * so expect up to a few chunks of deviation from these values.
+     */
+    private static List<ChunkPos> calculateStrongholds(long seed) {
+        final int totalCount = 128;
+        final int distance = 32;
+        final int initialRingCount = 3;
+
+        ChunkRandom random = new ChunkRandom(new CheckedRandom(0L));
+        random.setCarverSeed(seed, 0, 0);
+        double angle = random.nextDouble() * Math.PI * 2.0;
+
+        List<ChunkPos> positions = new ArrayList<>(totalCount);
+        int inRing = 0;
+        int ringIndex = 0;
+        int countInRing = initialRingCount;
+
+        for (int k = 0; k < totalCount; k++) {
+            double e = (4.0 * distance + distance * ringIndex * 6)
+                     + (random.nextDouble() - 0.5) * distance * 2.5;
+            int chunkX = (int) Math.round(Math.cos(angle) * e);
+            int chunkZ = (int) Math.round(Math.sin(angle) * e);
+            positions.add(new ChunkPos(chunkX, chunkZ));
+
+            angle += Math.PI * 2.0 / countInRing;
+            inRing++;
+            if (inRing == countInRing) {
+                ringIndex++;
+                inRing = 0;
+                countInRing = countInRing + 2 * countInRing / (ringIndex + 1);
+                countInRing = Math.min(countInRing, totalCount - (k + 1));
+                angle += random.nextDouble() * Math.PI * 2.0;
+            }
+        }
+        return positions;
     }
 
     private static ChunkPos getStartChunk(long seed, Kind k, int regionX, int regionZ) {
