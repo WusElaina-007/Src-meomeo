@@ -1,6 +1,6 @@
-package com.example.addon.modules;
+package com.phgmc.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.phgmc.addon.PhgMCAddon;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.BoolSetting;
@@ -153,7 +153,7 @@ public class StructureFinder extends Module {
     private static final String WP_PREFIX = "[TimCT] ";
 
     public StructureFinder() {
-        super(AddonTemplate.Student_esp, "Tim-Cong-Trinh",
+        super(PhgMCAddon.PhgMC_Support, "Tim-Cong-Trinh",
             "Dự đoán vị trí công trình (Village/Temple/Stronghold/End City…) từ seed.");
 
         // Register per-structure toggles, grouped by dimension

@@ -1,12 +1,18 @@
-# Student — Meteor Client addon
+# PhgMC — Meteor Client addon
 
-A Meteor Client addon for Minecraft **1.21.11** shipping three modules:
+A Meteor Client addon for Minecraft **1.21.11** shipping four modules:
 
-| Module         | Category      | Description                                              |
-|----------------|---------------|----------------------------------------------------------|
-| `High-Ping`    | Student pvp   | Fake high-ping / blink (queues movement, flushes bursts) |
-| `Student-Aura` | Student pvp   | Multi-target aura with smart-crit, aim modes, bypass     |
-| `Pearl-Predict`| Student pvp   | Ender-pearl trajectory + landing-point prediction        |
+| Module            | Category      | Description                                                  |
+|-------------------|---------------|--------------------------------------------------------------|
+| `High-Ping`       | PhgMC PvP     | Fake high-ping / blink (queues movement, flushes bursts).    |
+| `Student-Aura`    | PhgMC PvP     | Multi-target aura with smart-crit, aim modes, bypass.        |
+| `Pearl-Predict`   | PhgMC PvP     | Ender-pearl trajectory + landing-point prediction.           |
+| `Tim-Cong-Trinh`  | phg support   | Predict vanilla structure locations offline from a seed.     |
+
+Designed to be **independent of the original Student/KingMC addon** — the mod id
+(`phgmc`), package (`com.phgmc.addon`), jar name (`PhgMC-*.jar`) and category
+names (`PhgMC`, `PhgMC PvP`, `phg support`) do not collide with any previous
+Student build, so both can be installed side-by-side.
 
 ## Build
 
@@ -16,26 +22,29 @@ Requirements: **JDK 21**.
 ./gradlew build
 ```
 
-Output jar: `build/libs/Student-1.21.11.jar`.
+Output jar: `build/libs/PhgMC-1.21.11.jar`.
 
 ## Install
 
 1. Install Fabric Loader for Minecraft 1.21.11.
-2. Drop `meteor-client.jar` and `Student-1.21.11.jar` into `.minecraft/mods/`.
-3. Launch; modules appear under the `Student pvp` category.
+2. Drop `meteor-client.jar` and `PhgMC-1.21.11.jar` into `.minecraft/mods/`.
+3. Launch; modules appear under the `PhgMC PvP` and `phg support` categories.
+4. Registration is logged as `[PhgMC] + <Name>` in `.minecraft/logs/latest.log`
+   so failures are obvious.
 
 ## Project layout
 
 ```
-src/main/java/com/example/addon/
-  AddonTemplate.java            # Meteor entrypoint (registers modules + categories)
+src/main/java/com/phgmc/addon/
+  PhgMCAddon.java                 # Meteor entrypoint (registers modules + categories)
   modules/
     HighPing.java
-    PearlPredict.java
     StudentAura.java
+    PearlPredict.java
+    StructureFinder.java          # "Tim-Cong-Trinh"
 src/main/resources/
   fabric.mod.json
-  assets/student/icon.png
+  assets/phgmc/icon.png
 ```
 
 ## Notes

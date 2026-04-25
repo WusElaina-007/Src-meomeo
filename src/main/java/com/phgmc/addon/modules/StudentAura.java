@@ -1,6 +1,6 @@
-package com.example.addon.modules;
+package com.phgmc.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.phgmc.addon.PhgMCAddon;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
@@ -271,7 +271,7 @@ public class StudentAura extends Module {
     // ─── Constructor ─────────────────────────────────────────────────────────
 
     public StudentAura() {
-        super(AddonTemplate.Student_pvp, "Student-Aura", "Better Kill Aura.");
+        super(PhgMCAddon.PhgMC_PvP, "Student-Aura", "Better Kill Aura.");
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────

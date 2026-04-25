@@ -1,9 +1,9 @@
-package com.example.addon;
+package com.phgmc.addon;
 
-import com.example.addon.modules.HighPing;
-import com.example.addon.modules.PearlPredict;
-import com.example.addon.modules.StructureFinder;
-import com.example.addon.modules.StudentAura;
+import com.phgmc.addon.modules.HighPing;
+import com.phgmc.addon.modules.PearlPredict;
+import com.phgmc.addon.modules.StructureFinder;
+import com.phgmc.addon.modules.StudentAura;
 import com.mojang.logging.LogUtils;
 import meteordevelopment.meteorclient.addons.GithubRepo;
 import meteordevelopment.meteorclient.addons.MeteorAddon;
@@ -14,43 +14,43 @@ import org.slf4j.Logger;
 
 import java.util.function.Supplier;
 
-public class AddonTemplate extends MeteorAddon {
+public class PhgMCAddon extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
-    public static final Category Student       = new Category("Student");
-    public static final Category Student_pvp   = new Category("Student pvp");
-    public static final Category Student_esp   = new Category("phg support");
+    public static final Category PhgMC         = new Category("PhgMC");
+    public static final Category PhgMC_PvP     = new Category("PhgMC PvP");
+    public static final Category PhgMC_Support = new Category("phg support");
 
     @Override
     public void onInitialize() {
-        LOG.info("[Student Addon] onInitialize: registering modules");
+        LOG.info("[PhgMC] onInitialize: registering modules");
         safeAdd("HighPing",        HighPing::new);
         safeAdd("StudentAura",     StudentAura::new);
         safeAdd("PearlPredict",    PearlPredict::new);
         safeAdd("StructureFinder", StructureFinder::new);
-        LOG.info("[Student Addon] onInitialize: done");
+        LOG.info("[PhgMC] onInitialize: done");
     }
 
     private static void safeAdd(String label, Supplier<? extends Module> factory) {
         try {
             Module m = factory.get();
             Modules.get().add(m);
-            LOG.info("[Student Addon] + {} ({})", label, m.name);
+            LOG.info("[PhgMC] + {} ({})", label, m.name);
         } catch (Throwable t) {
-            LOG.error("[Student Addon] FAILED to register {}: {}", label, t.toString(), t);
+            LOG.error("[PhgMC] FAILED to register {}: {}", label, t.toString(), t);
         }
     }
 
     @Override
     public void onRegisterCategories() {
-        LOG.info("[Student Addon] onRegisterCategories");
-        Modules.registerCategory(Student);
-        Modules.registerCategory(Student_pvp);
-        Modules.registerCategory(Student_esp);
+        LOG.info("[PhgMC] onRegisterCategories");
+        Modules.registerCategory(PhgMC);
+        Modules.registerCategory(PhgMC_PvP);
+        Modules.registerCategory(PhgMC_Support);
     }
 
     @Override
     public String getPackage() {
-        return "com.example.addon";
+        return "com.phgmc.addon";
     }
 
     @Override

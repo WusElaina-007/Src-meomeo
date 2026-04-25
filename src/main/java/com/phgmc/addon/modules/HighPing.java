@@ -1,6 +1,6 @@
-package com.example.addon.modules;
+package com.phgmc.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.phgmc.addon.PhgMCAddon;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
@@ -97,7 +97,7 @@ public class HighPing extends Module {
     // ─── Constructor ──────────────────────────────────────────────────────────
 
     public HighPing() {
-        super(AddonTemplate.Student_pvp, "High-Ping", "Fake high ping lag / blink effect.");
+        super(PhgMCAddon.PhgMC_PvP, "High-Ping", "Fake high ping lag / blink effect.");
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
-package com.example.addon.modules;
+package com.phgmc.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.phgmc.addon.PhgMCAddon;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
@@ -104,7 +104,7 @@ public class PearlPredict extends Module {
     // ─── Constructor ─────────────────────────────────────────────────────────
 
     public PearlPredict() {
-        super(AddonTemplate.Student_pvp, "Pearl-Predict", "Hiện trajectory và landing point của ender pearl.");
+        super(PhgMCAddon.PhgMC_PvP, "Pearl-Predict", "Hiện trajectory và landing point của ender pearl.");
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────

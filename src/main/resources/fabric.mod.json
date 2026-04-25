@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "id": "student",
+  "id": "phgmc",
   "version": "${version}",
-  "name": "Student",
-  "description": "Meteor Client addon (HighPing, StudentAura, PearlPredict).",
+  "name": "PhgMC",
+  "description": "Meteor Client addon (High-Ping, Student-Aura, Pearl-Predict, Tim-Cong-Trinh).",
   "authors": [
     "WusElaina-007"
   ],
   "contact": {
     "sources": "https://github.com/WusElaina-007/Src-meomeo"
   },
-  "icon": "assets/student/icon.png",
+  "icon": "assets/phgmc/icon.png",
   "environment": "client",
   "entrypoints": {
     "meteor": [
-      "com.example.addon.AddonTemplate"
+      "com.phgmc.addon.PhgMCAddon"
     ]
   },
   "depends": {
