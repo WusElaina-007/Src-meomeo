@@ -7,6 +7,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.common.KeepAliveC2SPacket;
 import net.minecraft.network.packet.c2s.play.*;
 
 import java.util.ArrayList;
@@ -223,9 +224,7 @@ public class HighPing extends Module {
         if (pkt instanceof ClientCommandC2SPacket cmd) {
             var mode = cmd.getMode();
             return mode == ClientCommandC2SPacket.Mode.START_SPRINTING
-                || mode == ClientCommandC2SPacket.Mode.STOP_SPRINTING
-                || mode == ClientCommandC2SPacket.Mode.START_SNEAKING
-                || mode == ClientCommandC2SPacket.Mode.STOP_SNEAKING;
+                || mode == ClientCommandC2SPacket.Mode.STOP_SPRINTING;
         }
         return false;
     }

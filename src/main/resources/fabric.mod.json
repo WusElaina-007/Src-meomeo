@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "student",
+  "version": "${version}",
+  "name": "Student",
+  "description": "Meteor Client addon (HighPing, StudentAura, PearlPredict).",
+  "authors": [
+    "WusElaina-007"
+  ],
+  "contact": {
+    "sources": "https://github.com/WusElaina-007/Src-meomeo"
+  },
+  "icon": "assets/student/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "com.example.addon.AddonTemplate"
+    ]
+  },
+  "depends": {
+    "java": ">=21",
+    "minecraft": "1.21.11",
+    "meteor-client": "*"
+  }
+}

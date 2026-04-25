@@ -30,6 +30,11 @@ import java.util.List;
  */
 public class PearlPredict extends Module {
 
+    private Vec3d playerPos() {
+        return new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+    }
+
+
     private final SettingGroup sgGeneral  = settings.getDefaultGroup();
     private final SettingGroup sgRender   = settings.createGroup("Render");
 
@@ -188,7 +193,7 @@ public class PearlPredict extends Module {
                 Vec3d hitPos = hit.getPos();
                 trajectoryPoints.add(hitPos);
                 landingPos = hitPos;
-                landingDistance = mc.player.getPos().distanceTo(landingPos);
+                landingDistance = playerPos().distanceTo(landingPos);
                 break;
             }
 
@@ -196,9 +201,9 @@ public class PearlPredict extends Module {
             pos = nextPos;
 
             // Safety: dừng nếu out of world
-            if (pos.y < mc.world.getBottomY() || pos.y > mc.world.getTopY()) {
+            if (pos.y < mc.world.getBottomY() || pos.y > mc.world.getTopY(net.minecraft.world.Heightmap.Type.WORLD_SURFACE, 0, 0)) {
                 landingPos = pos;
-                landingDistance = mc.player.getPos().distanceTo(landingPos);
+                landingDistance = playerPos().distanceTo(landingPos);
                 break;
             }
         }
