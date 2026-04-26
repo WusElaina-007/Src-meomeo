@@ -1,5 +1,6 @@
 package com.phgmc.addon.modules;
 
+import com.phgmc.addon.BiomeSampler;
 import com.phgmc.addon.PhgMCAddon;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
@@ -154,6 +155,12 @@ public class StructureFinder extends Module {
         .defaultValue(true)
         .build());
 
+    private final Setting<Boolean> biomeFilter = sgGeneral.add(new BoolSetting.Builder()
+        .name("lọc-theo-biome")
+        .description("Loại bỏ ngẫu nhiên RNG đúng nhưng biome sai (VD làng giữa biển). Lần quét đầu mất 5-15s để nạp biome noise — chấp nhận được.")
+        .defaultValue(true)
+        .build());
+
     private final Setting<SettingColor> colorSide = sgRender.add(new ColorSetting.Builder()
         .name("màu-nền")
         .description("Màu nền chấm (có alpha).")
@@ -248,6 +255,19 @@ public class StructureFinder extends Module {
         int centerCX = playerX >> 4;
         int centerCZ = playerZ >> 4;
 
+        boolean doBiomeCheck = biomeFilter.get();
+        if (doBiomeCheck) {
+            try {
+                BiomeSampler.setSeed(seed);
+            } catch (Throwable t) {
+                // If biome sampler fails to initialise, scan without biome filter.
+                doBiomeCheck = false;
+                final Throwable fail = t;
+                if (mc != null) mc.execute(() -> ChatUtils.warning(
+                    "Tìm-Công-Trình: không nạp được biome filter: %s", fail));
+            }
+        }
+
         List<Found> results = new ArrayList<>();
 
         for (Kind k : Kind.values()) {
@@ -280,9 +300,9 @@ public class StructureFinder extends Module {
                     double dx = bx - playerX;
                     double dz = bz - playerZ;
                     double dist = Math.sqrt(dx * dx + dz * dz);
-                    if (dist <= r) {
-                        results.add(new Found(k, bx, bz, dist));
-                    }
+                    if (dist > r) continue;
+                    if (doBiomeCheck && !biomeAllowed(k, bx, bz)) continue;
+                    results.add(new Found(k, bx, bz, dist));
                 }
                 if (epoch != scanEpoch) return;
             }
@@ -354,6 +374,32 @@ public class StructureFinder extends Module {
             }
         }
         return positions;
+    }
+
+    private static boolean biomeAllowed(Kind k, int blockX, int blockZ) {
+        List<String> allow = switch (k) {
+            case VILLAGE          -> BiomeSampler.VILLAGE;
+            case PILLAGER_OUTPOST -> BiomeSampler.PILLAGER_OUTPOST;
+            case DESERT_PYRAMID   -> BiomeSampler.DESERT_PYRAMID;
+            case JUNGLE_PYRAMID   -> BiomeSampler.JUNGLE_TEMPLE;
+            case SWAMP_HUT        -> BiomeSampler.SWAMP_HUT;
+            case IGLOO            -> BiomeSampler.IGLOO;
+            case OCEAN_MONUMENT   -> BiomeSampler.OCEAN_MONUMENT;
+            case WOODLAND_MANSION -> BiomeSampler.WOODLAND_MANSION;
+            case SHIPWRECK        -> BiomeSampler.SHIPWRECK;
+            case ANCIENT_CITY     -> BiomeSampler.ANCIENT_CITY;
+            case TRIAL_CHAMBERS   -> BiomeSampler.TRIAL_CHAMBERS;
+            case NETHER_FORTRESS  -> BiomeSampler.NETHER_FORTRESS;
+            case BASTION_REMNANT  -> BiomeSampler.BASTION_REMNANT;
+            case RUINED_PORTAL_N  -> BiomeSampler.RUINED_PORTAL_N;
+            // RUINED_PORTAL_OW spawns in nearly every overworld biome → no useful filter.
+            // STRONGHOLD also accepts almost any overworld biome (no useful filter).
+            // END_CITY: end biome source not supported here, skip filter.
+            default -> null;
+        };
+        if (allow == null) return true;
+        var key = BiomeSampler.sample(k.dimension, blockX, k.knownY, blockZ);
+        return BiomeSampler.matchesAny(key, allow);
     }
 
     private static ChunkPos getStartChunk(long seed, Kind k, int regionX, int regionZ) {
