@@ -10,216 +10,250 @@ import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.c2s.common.KeepAliveC2SPacket;
 import net.minecraft.network.packet.c2s.play.*;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Random;
 
 /**
- * HighPing ("Blink") – Meteor Client Addon Module
+ * High-Ping (safer blink). Holds movement packets to fake ping spike, then
+ * flushes them. Designed to reduce flag rate on heuristic anti-cheats
+ * (Vulcan, Matrix, Spartan, NCP) by:
+ *   - Capping accumulated distance per flush (no large warps).
+ *   - Randomising lag/normal duration (no fixed cadence).
+ *   - Sending periodic on-ground packets so server doesn't time out.
+ *   - Streaming the flush over several ticks instead of one burst.
  *
- * Local player: moves and PvPs perfectly smooth.
- * Server/opponents: sees the player frozen, then violently
- *   teleporting to their real position in a burst of packets.
- *   Attack packets are forwarded immediately so damage always
- *   registers even while movement is being held.
- *
- * How it works:
- *   LAG PHASE  – movement packets are intercepted and queued.
- *                 Server thinks the player is standing still.
- *                 Attack, chat, inventory packets pass through
- *                 immediately so gameplay stays functional.
- *   FLUSH PHASE – all queued packets are sent in a single burst
- *                 within one network tick.  The server processes
- *                 them instantly → player appears to teleport.
- *                 Cycle then restarts.
+ * Movement-prediction anti-cheats (Grim, Polar) still detect this by design.
  */
 public class HighPing extends Module {
 
-    // ─── Setting groups ───────────────────────────────────────────────────────
-
-    private final SettingGroup sgGeneral = settings.getDefaultGroup();
+    private final SettingGroup sgGeneral  = settings.getDefaultGroup();
     private final SettingGroup sgAdvanced = settings.createGroup("Advanced");
-
-    // ─── General ──────────────────────────────────────────────────────────────
 
     private final Setting<Boolean> loopMode = sgGeneral.add(new BoolSetting.Builder()
         .name("loop-mode")
-        .description("Automatically alternate between lag and flush phases.")
+        .description("Tự động chuyển giữa pha lag và pha flush.")
         .defaultValue(true)
         .build());
 
     private final Setting<Double> loopLagSeconds = sgGeneral.add(new DoubleSetting.Builder()
         .name("loop-lag-seconds")
-        .description("Seconds to hold movement packets (lag phase). Higher = longer freeze on server side.")
-        .defaultValue(0.6).min(0.05).sliderMin(0.05).sliderMax(10.0)
+        .description("Thời gian giữ packet (pha lag). Càng dài càng dễ bị AC bắt.")
+        .defaultValue(0.2).min(0.05).sliderMin(0.05).sliderMax(2.0)
         .visible(loopMode::get)
         .build());
 
     private final Setting<Double> loopNormalSeconds = sgGeneral.add(new DoubleSetting.Builder()
         .name("loop-normal-seconds")
-        .description("Seconds to send normally after flush. Keep this short so the burst effect is clean.")
-        .defaultValue(0.15).min(0.05).sliderMin(0.05).sliderMax(5.0)
+        .description("Thời gian gửi bình thường giữa các lần lag. Càng dài thì heuristic AC càng khó flag.")
+        .defaultValue(0.6).min(0.05).sliderMin(0.05).sliderMax(5.0)
         .visible(loopMode::get)
         .build());
 
-    // ─── Advanced ─────────────────────────────────────────────────────────────
+    private final Setting<Double> distanceCap = sgGeneral.add(new DoubleSetting.Builder()
+        .name("distance-cap")
+        .description("Auto-flush khi tích lũy quãng đường ngang vượt ngưỡng (block). Quan trọng nhất để né AC heuristic — flush trông giống lag spike thật chứ không phải warp xa.")
+        .defaultValue(6.0).min(1.0).sliderMin(1.0).sliderMax(40.0)
+        .build());
 
-    /**
-     * Key improvement over the original:
-     * Attack + swing packets bypass the queue entirely so damage
-     * always registers on the server, even during the lag phase.
-     */
+    private final Setting<Boolean> randomizeTiming = sgAdvanced.add(new BoolSetting.Builder()
+        .name("randomize-timing")
+        .description("Random ±30% lag/normal duration mỗi cycle để né pattern detect.")
+        .defaultValue(true)
+        .build());
+
+    private final Setting<Boolean> keepAlive = sgAdvanced.add(new BoolSetting.Builder()
+        .name("keep-alive-look")
+        .description("Trong lúc lag, định kỳ gửi 1 OnGround packet tại vị trí cũ → server thấy player vẫn alive, không kick timeout.")
+        .defaultValue(true)
+        .build());
+
+    private final Setting<Integer> keepAliveInterval = sgAdvanced.add(new IntSetting.Builder()
+        .name("keep-alive-interval")
+        .description("Gửi 1 keep-alive packet mỗi N tick.")
+        .defaultValue(4).min(1).sliderMin(1).sliderMax(20)
+        .visible(keepAlive::get)
+        .build());
+
+    private final Setting<Integer> flushPerTick = sgAdvanced.add(new IntSetting.Builder()
+        .name("flush-per-tick")
+        .description("Số packet được flush mỗi tick. Lớn = flush nhanh + giật nhiều. Nhỏ = trơn hơn nhưng tốn nhiều tick.")
+        .defaultValue(3).min(1).sliderMin(1).sliderMax(20)
+        .build());
+
     private final Setting<Boolean> passAttacks = sgAdvanced.add(new BoolSetting.Builder()
         .name("pass-attacks")
-        .description("Forward attack packets immediately. Damage registers even while lagging.")
+        .description("Cho attack/swing đi thẳng → damage register kể cả khi đang lag. Tự động flush queue trước attack để né AC reach check.")
         .defaultValue(true)
+        .build());
+
+    private final Setting<Boolean> flushBeforeAttack = sgAdvanced.add(new BoolSetting.Builder()
+        .name("flush-before-attack")
+        .description("Flush hết queue ngay trước attack. Giảm risk AC reject hit do server thấy bạn ở vị trí cũ.")
+        .defaultValue(true)
+        .visible(passAttacks::get)
         .build());
 
     private final Setting<Boolean> passSprint = sgAdvanced.add(new BoolSetting.Builder()
         .name("pass-sprint-commands")
-        .description("Forward sprint start/stop commands immediately to avoid kick on some servers.")
-        .defaultValue(false)
+        .description("Cho sprint start/stop đi thẳng để né AC sprint-state check.")
+        .defaultValue(true)
         .build());
 
     private final Setting<Integer> maxQueue = sgAdvanced.add(new IntSetting.Builder()
         .name("max-queue")
-        .description("Maximum packets to queue before force-flushing (safety cap to avoid memory bloat).")
-        .defaultValue(200).min(20).sliderMax(500)
+        .description("Tối đa packet trong queue trước khi force flush (an toàn bộ nhớ).")
+        .defaultValue(100).min(20).sliderMax(500)
         .build());
 
     // ─── State ────────────────────────────────────────────────────────────────
 
-    /** Packets held during the lag phase, in order. */
-    private final List<Packet<?>> queue = new ArrayList<>();
+    private final Deque<Packet<?>> queue = new ArrayDeque<>();
+    private final Random random = new Random();
 
-    private boolean lagging     = true;  // Start in lag phase
-    private double  tickCounter = 0;
+    private enum Phase { LAG, FLUSH, NORMAL }
+    private Phase phase = Phase.LAG;
 
-    // ─── Constructor ──────────────────────────────────────────────────────────
+    private int phaseTicks;
+    private int phaseDurationTicks;
+    private int keepAliveCounter;
+
+    /** Last position seen in a packet — used to compute accumulated distance. */
+    private double lastX = Double.NaN, lastY = Double.NaN, lastZ = Double.NaN;
+    private double accumulatedDistance = 0.0;
+
+    /** Last on-ground state seen — used for keep-alive packets. */
+    private boolean lastOnGround = true;
 
     public HighPing() {
-        super(PhgMCAddon.PhgMC_PvP, "High-Ping", "Fake high ping lag / blink effect.");
+        super(PhgMCAddon.PhgMC_PvP, "High-Ping", "Fake high ping / blink, có giới hạn distance để giảm khả năng bị AC bắt.");
     }
-
-    // ─── Lifecycle ────────────────────────────────────────────────────────────
 
     @Override
     public void onActivate() {
         queue.clear();
-        tickCounter = 0;
-        lagging     = true;
+        accumulatedDistance = 0.0;
+        keepAliveCounter = 0;
+        lastX = lastY = lastZ = Double.NaN;
+        if (mc.player != null) {
+            lastX = mc.player.getX();
+            lastY = mc.player.getY();
+            lastZ = mc.player.getZ();
+            lastOnGround = mc.player.isOnGround();
+        }
+        startPhase(Phase.LAG);
     }
 
     @Override
     public void onDeactivate() {
-        // Always flush on disable so the player doesn't rubber-band weirdly
         flushAll();
     }
 
-    // ─── Tick ─────────────────────────────────────────────────────────────────
-
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null) return;
+        if (mc.player == null || mc.getNetworkHandler() == null) return;
 
-        // Safety: force-flush if queue grows too large
         if (queue.size() >= maxQueue.get()) {
-            startNormalPhase();
+            startPhase(Phase.FLUSH);
+        }
+
+        if (phase == Phase.FLUSH) {
+            int n = flushPerTick.get();
+            for (int i = 0; i < n && !queue.isEmpty(); i++) {
+                mc.getNetworkHandler().sendPacket(queue.pollFirst());
+            }
+            if (queue.isEmpty()) startPhase(loopMode.get() ? Phase.NORMAL : Phase.LAG);
             return;
         }
 
         if (!loopMode.get()) return;
 
-        tickCounter++;
+        phaseTicks++;
 
-        double lagTicks    = loopLagSeconds.get()    * 20.0;
-        double normalTicks = loopNormalSeconds.get() * 20.0;
-
-        if (lagging) {
-            if (tickCounter >= lagTicks) startNormalPhase();
-        } else {
-            if (tickCounter >= normalTicks) startLagPhase();
+        if (phase == Phase.LAG) {
+            if (keepAlive.get() && ++keepAliveCounter >= keepAliveInterval.get()) {
+                keepAliveCounter = 0;
+                mc.getNetworkHandler().sendPacket(
+                    new PlayerMoveC2SPacket.OnGroundOnly(lastOnGround, false));
+            }
+            if (phaseTicks >= phaseDurationTicks) startPhase(Phase.FLUSH);
+        } else if (phase == Phase.NORMAL) {
+            if (phaseTicks >= phaseDurationTicks) startPhase(Phase.LAG);
         }
     }
-
-    // ─── Packet intercept ────────────────────────────────────────────────────
 
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
-        if (!lagging) return;
-
         Packet<?> pkt = event.packet;
 
-        // ── Always let through: attacks (damage must register) ────────────────
-        if (passAttacks.get() && isAttackPacket(pkt)) return;
+        if (passAttacks.get() && isAttackPacket(pkt)) {
+            if (flushBeforeAttack.get() && !queue.isEmpty()) flushAll();
+            return;
+        }
 
-        // ── Always let through: chat, abilities, inventory, etc. ─────────────
+        if (phase != Phase.LAG) return;
+
         if (isAlwaysPassPacket(pkt)) return;
-
-        // ── Optionally let through sprint/sneak commands ──────────────────────
         if (passSprint.get() && isSprintCommand(pkt)) return;
-
-        // ── Only queue movement packets – everything else passes freely ───────
         if (!isMovementPacket(pkt)) return;
 
+        // Track position + accumulated horizontal distance for distance cap.
+        if (pkt instanceof PlayerMoveC2SPacket move) {
+            double nx = move.getX(Double.isNaN(lastX) ? 0 : lastX);
+            double ny = move.getY(Double.isNaN(lastY) ? 0 : lastY);
+            double nz = move.getZ(Double.isNaN(lastZ) ? 0 : lastZ);
+            if (!Double.isNaN(lastX) && move.changesPosition()) {
+                double dx = nx - lastX, dz = nz - lastZ;
+                accumulatedDistance += Math.sqrt(dx * dx + dz * dz);
+            }
+            lastX = nx; lastY = ny; lastZ = nz;
+            lastOnGround = move.isOnGround();
+        }
+
         event.cancel();
-        queue.add(pkt);
+        queue.addLast(pkt);
+
+        if (accumulatedDistance >= distanceCap.get()) {
+            startPhase(Phase.FLUSH);
+        }
     }
 
-    // ─── Phase transitions ───────────────────────────────────────────────────
+    private void startPhase(Phase next) {
+        phase = next;
+        phaseTicks = 0;
+        keepAliveCounter = 0;
 
-    private void startNormalPhase() {
-        tickCounter = 0;
-        lagging     = false;
-        // Dump all queued packets in one burst → the "teleport" / lag spike effect
-        flushAll();
+        if (next == Phase.LAG) {
+            accumulatedDistance = 0.0;
+            phaseDurationTicks = jitter(loopLagSeconds.get() * 20.0);
+        } else if (next == Phase.NORMAL) {
+            phaseDurationTicks = jitter(loopNormalSeconds.get() * 20.0);
+        }
     }
 
-    private void startLagPhase() {
-        tickCounter = 0;
-        lagging     = true;
+    private int jitter(double baseTicks) {
+        if (!randomizeTiming.get()) return Math.max(1, (int) baseTicks);
+        double factor = 0.7 + random.nextDouble() * 0.6; // ±30%
+        return Math.max(1, (int) (baseTicks * factor));
     }
 
-    /**
-     * Sends every queued packet to the server in a single network tick.
-     * This is the key to the effect: the server receives all position
-     * updates at once and processes them sequentially, making the client
-     * appear to teleport from its old position to its real one.
-     */
     private void flushAll() {
         if (queue.isEmpty()) return;
         if (mc.getNetworkHandler() == null) { queue.clear(); return; }
-
-        for (Packet<?> pkt : queue) {
-            mc.getNetworkHandler().sendPacket(pkt);
-        }
+        for (Packet<?> pkt : queue) mc.getNetworkHandler().sendPacket(pkt);
         queue.clear();
+        accumulatedDistance = 0.0;
     }
 
-    // ─── Packet classification ───────────────────────────────────────────────
-
-    /**
-     * Movement packets: hold these to create the lag illusion.
-     * PlayerMoveC2SPacket covers all four subtypes:
-     *   Full, LookAndOnGround, PositionAndOnGround, OnGroundOnly
-     */
     private boolean isMovementPacket(Packet<?> pkt) {
         return pkt instanceof PlayerMoveC2SPacket;
     }
 
-    /**
-     * Attack packets: always pass so damage registers in real-time.
-     *   PlayerInteractEntityC2SPacket – actual hit
-     *   HandSwingC2SPacket            – swing animation (also triggers some server checks)
-     */
     private boolean isAttackPacket(Packet<?> pkt) {
         return pkt instanceof PlayerInteractEntityC2SPacket
             || pkt instanceof HandSwingC2SPacket;
     }
 
-    /**
-     * Sprint / sneak state commands.  Some anti-cheats correlate
-     * sprint state with position changes; passing these can help.
-     */
     private boolean isSprintCommand(Packet<?> pkt) {
         if (pkt instanceof ClientCommandC2SPacket cmd) {
             var mode = cmd.getMode();
@@ -229,11 +263,6 @@ public class HighPing extends Module {
         return false;
     }
 
-    /**
-     * Packets that must always pass to keep the session alive and
-     * functional (chat, inventory, slot changes, abilities, etc.)
-     * Holding these would cause visible side effects or server kicks.
-     */
     private boolean isAlwaysPassPacket(Packet<?> pkt) {
         return pkt instanceof ChatMessageC2SPacket
             || pkt instanceof CommandExecutionC2SPacket
@@ -246,11 +275,13 @@ public class HighPing extends Module {
             || pkt instanceof KeepAliveC2SPacket;
     }
 
-    // ─── HUD ─────────────────────────────────────────────────────────────────
-
     @Override
     public String getInfoString() {
-        if (!lagging) return "§aFlush";
-        return "§cLag §7(" + queue.size() + ")";
+        String dist = String.format("%.1f", accumulatedDistance);
+        return switch (phase) {
+            case LAG    -> "§cLag §7(" + queue.size() + " §8| §7" + dist + "m)";
+            case FLUSH  -> "§eFlush §7(" + queue.size() + ")";
+            case NORMAL -> "§aNormal";
+        };
     }
 }
