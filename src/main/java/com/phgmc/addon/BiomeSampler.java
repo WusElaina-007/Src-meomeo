@@ -199,6 +199,23 @@ public final class BiomeSampler {
     public static final List<String> NETHER_FORTRESS = NETHER;
     public static final List<String> RUINED_PORTAL_N = NETHER;
 
+    public static final List<String> OCEAN_RUIN = List.of(
+        "minecraft:frozen_ocean", "minecraft:cold_ocean",
+        "minecraft:ocean", "minecraft:deep_frozen_ocean",
+        "minecraft:deep_cold_ocean", "minecraft:deep_ocean",
+        "minecraft:lukewarm_ocean", "minecraft:warm_ocean",
+        "minecraft:deep_lukewarm_ocean");
+
+    public static final List<String> TRAIL_RUINS = List.of(
+        "minecraft:taiga", "minecraft:snowy_taiga",
+        "minecraft:old_growth_pine_taiga", "minecraft:old_growth_spruce_taiga",
+        "minecraft:old_growth_birch_forest", "minecraft:jungle");
+
+    public static final List<String> BURIED_TREASURE = List.of(
+        "minecraft:beach", "minecraft:snowy_beach");
+
+    public static final List<String> NETHER_FOSSIL = List.of("minecraft:soul_sand_valley");
+
     /** Any overworld biome except end/nether. For overworld ruined portal + stronghold. */
     public static final List<String> OVERWORLD_ANY = null; // null = accept any non-null biome
 }

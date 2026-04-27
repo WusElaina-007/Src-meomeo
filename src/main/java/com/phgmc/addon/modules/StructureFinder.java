@@ -22,6 +22,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.random.CheckedRandom;
 import net.minecraft.util.math.random.ChunkRandom;
+import net.minecraft.world.gen.chunk.placement.StructurePlacement;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -59,8 +60,12 @@ public class StructureFinder extends Module {
         RUINED_PORTAL_OW("Cổng đổ nát (Overworld)",    40, 15, 34222645,  false, Dimension.Overworld,  60),
         ANCIENT_CITY    ("Thành phố cổ (Deep Dark)",   24,  8, 20083232,  false, Dimension.Overworld, -51),
         TRIAL_CHAMBERS  ("Buồng thử thách",            34, 12, 94251327,  false, Dimension.Overworld, -20),
+        OCEAN_RUIN      ("Tàn tích đại dương",         20,  8, 14357621,  false, Dimension.Overworld,  40),
+        TRAIL_RUINS     ("Tàn tích đường mòn",         34,  8, 83469867,  false, Dimension.Overworld,  60),
+        BURIED_TREASURE ("Kho báu chôn (Buried Treasure)", 1, 0, 0,       false, Dimension.Overworld,  56,  false, 0.01f, 9, FreqMethod.LEGACY_TYPE_2),
         NETHER_FORTRESS ("Lâu đài Nether",             27,  4, 30084232,  false, Dimension.Nether,     65),
         BASTION_REMNANT ("Bastion Remnant",            27,  4, 30084232,  false, Dimension.Nether,     45),
+        NETHER_FOSSIL   ("Hoá thạch Nether",            2,  1, 14357921,  false, Dimension.Nether,     85),
         RUINED_PORTAL_N ("Cổng đổ nát (Nether)",       40, 15, 34222645,  false, Dimension.Nether,     40),
         END_CITY        ("End City",                   20, 11, 10387313,  true,  Dimension.End,        75);
 
@@ -72,12 +77,22 @@ public class StructureFinder extends Module {
         public final int knownY;
         /** If true this Kind uses ConcentricRings placement instead of RandomSpread (Stronghold). */
         public final boolean concentricRings;
+        /** Probability filter applied after start-chunk check (1.0 = always). */
+        public final float frequency;
+        /** Block offset within a chunk to use for the in-world position (default 8 = chunk center). */
+        public final int locateOffset;
+        /** Frequency reduction algorithm (only relevant when frequency < 1.0). */
+        public final FreqMethod freqMethod;
 
         Kind(String label, int spacing, int separation, int salt, boolean triangular, Dimension dimension, int knownY) {
-            this(label, spacing, separation, salt, triangular, dimension, knownY, false);
+            this(label, spacing, separation, salt, triangular, dimension, knownY, false, 1.0f, 8, FreqMethod.DEFAULT);
         }
 
         Kind(String label, int spacing, int separation, int salt, boolean triangular, Dimension dimension, int knownY, boolean concentricRings) {
+            this(label, spacing, separation, salt, triangular, dimension, knownY, concentricRings, 1.0f, 8, FreqMethod.DEFAULT);
+        }
+
+        Kind(String label, int spacing, int separation, int salt, boolean triangular, Dimension dimension, int knownY, boolean concentricRings, float frequency, int locateOffset, FreqMethod freqMethod) {
             this.label = label;
             this.spacing = spacing;
             this.separation = separation;
@@ -86,8 +101,14 @@ public class StructureFinder extends Module {
             this.dimension = dimension;
             this.knownY = knownY;
             this.concentricRings = concentricRings;
+            this.frequency = frequency;
+            this.locateOffset = locateOffset;
+            this.freqMethod = freqMethod;
         }
     }
+
+    /** Mirror of {@code StructurePlacement.FrequencyReductionMethod} so we don't need vanilla class at enum-init time. */
+    public enum FreqMethod { DEFAULT, LEGACY_TYPE_1, LEGACY_TYPE_2, LEGACY_TYPE_3 }
 
     private record Found(Kind kind, int blockX, int blockZ, double distance) {}
 
@@ -214,7 +235,7 @@ public class StructureFinder extends Module {
         return switch (k) {
             case STRONGHOLD, END_CITY, ANCIENT_CITY, WOODLAND_MANSION,
                  OCEAN_MONUMENT, NETHER_FORTRESS, BASTION_REMNANT,
-                 VILLAGE, TRIAL_CHAMBERS -> true;
+                 VILLAGE, TRIAL_CHAMBERS, BURIED_TREASURE -> true;
             default -> false;
         };
     }
@@ -295,8 +316,9 @@ public class StructureFinder extends Module {
             for (int rx = regionCX - regionRadius; rx <= regionCX + regionRadius; rx++) {
                 for (int rz = regionCZ - regionRadius; rz <= regionCZ + regionRadius; rz++) {
                     ChunkPos cp = getStartChunk(seed, k, rx, rz);
-                    int bx = cp.x * 16 + 8;
-                    int bz = cp.z * 16 + 8;
+                    if (k.frequency < 1.0f && !passesFrequency(seed, k, cp.x, cp.z)) continue;
+                    int bx = cp.x * 16 + k.locateOffset;
+                    int bz = cp.z * 16 + k.locateOffset;
                     double dx = bx - playerX;
                     double dz = bz - playerZ;
                     double dist = Math.sqrt(dx * dx + dz * dz);
@@ -389,8 +411,12 @@ public class StructureFinder extends Module {
             case SHIPWRECK        -> BiomeSampler.SHIPWRECK;
             case ANCIENT_CITY     -> BiomeSampler.ANCIENT_CITY;
             case TRIAL_CHAMBERS   -> BiomeSampler.TRIAL_CHAMBERS;
+            case OCEAN_RUIN       -> BiomeSampler.OCEAN_RUIN;
+            case TRAIL_RUINS      -> BiomeSampler.TRAIL_RUINS;
+            case BURIED_TREASURE  -> BiomeSampler.BURIED_TREASURE;
             case NETHER_FORTRESS  -> BiomeSampler.NETHER_FORTRESS;
             case BASTION_REMNANT  -> BiomeSampler.BASTION_REMNANT;
+            case NETHER_FOSSIL    -> BiomeSampler.NETHER_FOSSIL;
             case RUINED_PORTAL_N  -> BiomeSampler.RUINED_PORTAL_N;
             // RUINED_PORTAL_OW spawns in nearly every overworld biome → no useful filter.
             // STRONGHOLD also accepts almost any overworld biome (no useful filter).
@@ -400,6 +426,17 @@ public class StructureFinder extends Module {
         if (allow == null) return true;
         var key = BiomeSampler.sample(k.dimension, blockX, k.knownY, blockZ);
         return BiomeSampler.matchesAny(key, allow);
+    }
+
+    /** Calls vanilla {@link StructurePlacement.FrequencyReductionMethod#shouldGenerate} to check rare-spawn structures. */
+    private static boolean passesFrequency(long seed, Kind k, int chunkX, int chunkZ) {
+        StructurePlacement.FrequencyReductionMethod m = switch (k.freqMethod) {
+            case LEGACY_TYPE_1 -> StructurePlacement.FrequencyReductionMethod.LEGACY_TYPE_1;
+            case LEGACY_TYPE_2 -> StructurePlacement.FrequencyReductionMethod.LEGACY_TYPE_2;
+            case LEGACY_TYPE_3 -> StructurePlacement.FrequencyReductionMethod.LEGACY_TYPE_3;
+            default            -> StructurePlacement.FrequencyReductionMethod.DEFAULT;
+        };
+        return m.shouldGenerate(seed, k.salt, chunkX, chunkZ, k.frequency);
     }
 
     private static ChunkPos getStartChunk(long seed, Kind k, int regionX, int regionZ) {

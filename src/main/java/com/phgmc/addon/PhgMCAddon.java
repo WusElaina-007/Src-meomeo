@@ -2,6 +2,8 @@ package com.phgmc.addon;
 
 import com.phgmc.addon.modules.HighPing;
 import com.phgmc.addon.modules.PearlPredict;
+import com.phgmc.addon.modules.PlayerCam;
+import com.phgmc.addon.modules.SlimeChunk;
 import com.phgmc.addon.modules.StructureFinder;
 import com.phgmc.addon.modules.StudentAura;
 import com.mojang.logging.LogUtils;
@@ -27,6 +29,8 @@ public class PhgMCAddon extends MeteorAddon {
         safeAdd("StudentAura",     StudentAura::new);
         safeAdd("PearlPredict",    PearlPredict::new);
         safeAdd("StructureFinder", StructureFinder::new);
+        safeAdd("SlimeChunk",      SlimeChunk::new);
+        safeAdd("PlayerCam",       PlayerCam::new);
         LOG.info("[PhgMC] onInitialize: done");
     }
 
