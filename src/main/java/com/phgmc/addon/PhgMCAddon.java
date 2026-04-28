@@ -1,9 +1,12 @@
 package com.phgmc.addon;
 
+import com.phgmc.addon.modules.BiomeBorderMap;
 import com.phgmc.addon.modules.HighPing;
 import com.phgmc.addon.modules.PearlPredict;
 import com.phgmc.addon.modules.PlayerCam;
+import com.phgmc.addon.modules.PlayerTracker;
 import com.phgmc.addon.modules.SlimeChunk;
+import com.phgmc.addon.modules.StashFinder;
 import com.phgmc.addon.modules.StructureFinder;
 import com.phgmc.addon.modules.StudentAura;
 import com.mojang.logging.LogUtils;
@@ -31,6 +34,9 @@ public class PhgMCAddon extends MeteorAddon {
         safeAdd("StructureFinder", StructureFinder::new);
         safeAdd("SlimeChunk",      SlimeChunk::new);
         safeAdd("PlayerCam",       PlayerCam::new);
+        safeAdd("BiomeBorderMap",  BiomeBorderMap::new);
+        safeAdd("PlayerTracker",   PlayerTracker::new);
+        safeAdd("StashFinder",     StashFinder::new);
         LOG.info("[PhgMC] onInitialize: done");
     }
 
