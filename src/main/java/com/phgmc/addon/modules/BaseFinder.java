@@ -290,6 +290,10 @@ public class BaseFinder extends Module {
         return new HashMap<>(bases);
     }
 
+    public java.util.Collection<Base> snapshot() {
+        return new java.util.ArrayList<>(bases.values());
+    }
+
     @Override
     public String getInfoString() {
         return "§b" + bases.size() + "§7 base";

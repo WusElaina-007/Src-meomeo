@@ -283,6 +283,10 @@ public class SoundTracker extends Module {
         }
     }
 
+    public java.util.List<Cluster> snapshot() {
+        synchronized (clusters) { return new java.util.ArrayList<>(clusters); }
+    }
+
     @Override
     public String getInfoString() {
         long active = clusters.stream().filter(c -> c.hits >= minHits.get()).count();

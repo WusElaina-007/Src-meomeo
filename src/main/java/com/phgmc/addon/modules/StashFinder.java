@@ -246,6 +246,10 @@ public class StashFinder extends Module {
         }
     }
 
+    public java.util.Collection<Stash> snapshot() {
+        return new java.util.ArrayList<>(stashes.values());
+    }
+
     /** Returns top N most recent stashes. */
     public List<Stash> top(int n) {
         return stashes.values().stream()

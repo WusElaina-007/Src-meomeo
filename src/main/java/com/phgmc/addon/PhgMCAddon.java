@@ -1,11 +1,19 @@
 package com.phgmc.addon;
 
+import com.phgmc.addon.modules.ActivityHeatmap;
 import com.phgmc.addon.modules.BaseFinder;
 import com.phgmc.addon.modules.BiomeBorderMap;
+import com.phgmc.addon.modules.EntityFarTracker;
+import com.phgmc.addon.modules.ExplosionTracker;
 import com.phgmc.addon.modules.HighPing;
 import com.phgmc.addon.modules.HitboxPvP;
+import com.phgmc.addon.modules.HoleHunter;
+import com.phgmc.addon.modules.LightningTracker;
+import com.phgmc.addon.modules.MapReader;
+import com.phgmc.addon.modules.ParticleTracker;
 import com.phgmc.addon.modules.PearlPredict;
 import com.phgmc.addon.modules.PlayerCam;
+import com.phgmc.addon.modules.PlayerListTracker;
 import com.phgmc.addon.modules.PlayerTracker;
 import com.phgmc.addon.modules.SlimeChunk;
 import com.phgmc.addon.modules.SoundTracker;
@@ -42,7 +50,15 @@ public class PhgMCAddon extends MeteorAddon {
         safeAdd("StashFinder",     StashFinder::new);
         safeAdd("BaseFinder",      BaseFinder::new);
         safeAdd("SoundTracker",    SoundTracker::new);
-        safeAdd("HitboxPvP",       HitboxPvP::new);
+        safeAdd("HitboxPvP",         HitboxPvP::new);
+        safeAdd("ExplosionTracker",  ExplosionTracker::new);
+        safeAdd("ParticleTracker",   ParticleTracker::new);
+        safeAdd("LightningTracker",  LightningTracker::new);
+        safeAdd("PlayerListTracker", PlayerListTracker::new);
+        safeAdd("EntityFarTracker",  EntityFarTracker::new);
+        safeAdd("MapReader",         MapReader::new);
+        safeAdd("HoleHunter",        HoleHunter::new);
+        safeAdd("ActivityHeatmap",   ActivityHeatmap::new);
         LOG.info("[PhgMC] onInitialize: done");
     }
 
