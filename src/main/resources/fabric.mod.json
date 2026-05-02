@@ -17,6 +17,9 @@
       "com.phgmc.addon.PhgMCAddon"
     ]
   },
+  "mixins": [
+    "phgmc.mixins.json"
+  ],
   "depends": {
     "java": ">=21",
     "minecraft": "1.21.11",

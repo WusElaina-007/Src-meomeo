@@ -3,6 +3,7 @@ package com.phgmc.addon;
 import com.phgmc.addon.modules.BaseFinder;
 import com.phgmc.addon.modules.BiomeBorderMap;
 import com.phgmc.addon.modules.HighPing;
+import com.phgmc.addon.modules.HitboxPvP;
 import com.phgmc.addon.modules.PearlPredict;
 import com.phgmc.addon.modules.PlayerCam;
 import com.phgmc.addon.modules.PlayerTracker;
@@ -41,6 +42,7 @@ public class PhgMCAddon extends MeteorAddon {
         safeAdd("StashFinder",     StashFinder::new);
         safeAdd("BaseFinder",      BaseFinder::new);
         safeAdd("SoundTracker",    SoundTracker::new);
+        safeAdd("HitboxPvP",       HitboxPvP::new);
         LOG.info("[PhgMC] onInitialize: done");
     }
 
