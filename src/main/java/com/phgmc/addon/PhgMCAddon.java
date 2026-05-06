@@ -3,6 +3,8 @@ package com.phgmc.addon;
 import com.phgmc.addon.modules.ActivityHeatmap;
 import com.phgmc.addon.modules.BaseFinder;
 import com.phgmc.addon.modules.BiomeBorderMap;
+import com.phgmc.addon.modules.BlockUpdateTracker;
+import com.phgmc.addon.modules.ChunkChangeRecorder;
 import com.phgmc.addon.modules.EntityFarTracker;
 import com.phgmc.addon.modules.ExplosionTracker;
 import com.phgmc.addon.modules.HighPing;
@@ -58,6 +60,8 @@ public class PhgMCAddon extends MeteorAddon {
         safeAdd("EntityFarTracker",  EntityFarTracker::new);
         safeAdd("MapReader",         MapReader::new);
         safeAdd("HoleHunter",        HoleHunter::new);
+        safeAdd("BlockUpdateTracker", BlockUpdateTracker::new);
+        safeAdd("ChunkChangeRecorder", ChunkChangeRecorder::new);
         safeAdd("ActivityHeatmap",   ActivityHeatmap::new);
         LOG.info("[PhgMC] onInitialize: done");
     }

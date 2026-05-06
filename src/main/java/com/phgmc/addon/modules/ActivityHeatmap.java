@@ -71,6 +71,43 @@ public class ActivityHeatmap extends Module {
         .name("w-stash").defaultValue(6.0).min(0.0).sliderMax(50.0).build());
     private final Setting<Double> wHole = sgWeights.add(new DoubleSetting.Builder()
         .name("w-hole").defaultValue(2.0).min(0.0).sliderMax(20.0).build());
+    private final Setting<Double> wBlockUpdate = sgWeights.add(new DoubleSetting.Builder()
+        .name("w-block-update").defaultValue(0.8).min(0.0).sliderMax(20.0).build());
+    private final Setting<Double> wChunkChange = sgWeights.add(new DoubleSetting.Builder()
+        .name("w-chunk-đổi").defaultValue(5.0).min(0.0).sliderMax(50.0).build());
+
+    private final Setting<Double> kSigmoid = sgGeneral.add(new DoubleSetting.Builder()
+        .name("k-sigmoid")
+        .description("Hệ số trong công thức confidence = 1 - exp(-score/k). k thấp → tier confidence dễ đạt 99%.")
+        .defaultValue(8.0).min(1.0).sliderMax(100.0).build());
+
+    private final Setting<Integer> minSourceTypes = sgGeneral.add(new IntSetting.Builder()
+        .name("min-loại-source")
+        .description("Cell phải có ≥ N loại source khác nhau để confidence áp dụng (lọc fluke).")
+        .defaultValue(2).min(1).sliderMax(8).build());
+
+    private final Setting<Boolean> tierMode = sgRender.add(new BoolSetting.Builder()
+        .name("vẽ-theo-tier")
+        .description("Vẽ màu theo tier (suspect/likely/confirmed) thay vì gradient.")
+        .defaultValue(true).build());
+
+    private final Setting<Double> tierConfirmed = sgRender.add(new DoubleSetting.Builder()
+        .name("ngưỡng-confirmed").defaultValue(0.99).min(0.5).max(1.0).build());
+
+    private final Setting<Double> tierLikely = sgRender.add(new DoubleSetting.Builder()
+        .name("ngưỡng-likely").defaultValue(0.85).min(0.4).max(0.99).build());
+
+    private final Setting<Double> tierSuspect = sgRender.add(new DoubleSetting.Builder()
+        .name("ngưỡng-suspect").defaultValue(0.60).min(0.2).max(0.95).build());
+
+    private final Setting<SettingColor> colSuspect = sgRender.add(new ColorSetting.Builder()
+        .name("màu-suspect").defaultValue(new SettingColor(255, 230, 60, 200)).build());
+
+    private final Setting<SettingColor> colLikely = sgRender.add(new ColorSetting.Builder()
+        .name("màu-likely").defaultValue(new SettingColor(255, 140, 30, 220)).build());
+
+    private final Setting<SettingColor> colConfirmed = sgRender.add(new ColorSetting.Builder()
+        .name("màu-confirmed").defaultValue(new SettingColor(255, 50, 50, 240)).build());
 
     private final Setting<Boolean> renderColumns = sgRender.add(new BoolSetting.Builder()
         .name("vẽ-cột").defaultValue(true).build());
@@ -125,6 +162,8 @@ public class ActivityHeatmap extends Module {
         addBaseFinder();
         addStashFinder();
         addHoleHunter();
+        addBlockUpdateTracker();
+        addChunkChangeRecorder();
 
         // Drop tiny cells
         cells.values().removeIf(c -> c.score < 0.01);
@@ -141,8 +180,16 @@ public class ActivityHeatmap extends Module {
         if (topN.get() > 0) {
             List<Cell> top = top(topN.get());
             for (Cell c : top) {
+                Tier t = tierOf(confidenceOf(c));
+                if (tierMode.get() && t == Tier.NONE) continue;
                 try {
-                    String wpName = String.format("[Heat] %.0f %d,%d", c.score, c.cx * 16 + 8, c.cz * 16 + 8);
+                    String tag = switch (t) {
+                        case CONFIRMED -> "[Heat!]";
+                        case LIKELY    -> "[Heat?]";
+                        case SUSPECT   -> "[Heat??]";
+                        case NONE      -> "[Heat~]";
+                    };
+                    String wpName = String.format("%s %.0f %d,%d", tag, c.score, c.cx * 16 + 8, c.cz * 16 + 8);
                     Waypoint wp = new Waypoint.Builder()
                         .name(wpName).icon("circle")
                         .pos(new BlockPos(c.cx * 16 + 8, 70, c.cz * 16 + 8))
@@ -253,6 +300,40 @@ public class ActivityHeatmap extends Module {
         }
     }
 
+    private void addBlockUpdateTracker() {
+        BlockUpdateTracker m = Modules.get().get(BlockUpdateTracker.class);
+        if (m == null || !m.isActive()) return;
+        double w = wBlockUpdate.get();
+        for (var s : m.snapshot()) {
+            // density already accumulated; sample as score contribution
+            contribute(s.cx * 16 + 8, s.cz * 16 + 8, w * Math.min(s.density, 100) / 10.0, "blockupdate");
+        }
+    }
+
+    private void addChunkChangeRecorder() {
+        ChunkChangeRecorder m = Modules.get().get(ChunkChangeRecorder.class);
+        if (m == null || !m.isActive()) return;
+        double w = wChunkChange.get();
+        for (var ch : m.snapshot().values()) {
+            contribute(ch.cx * 16 + 8, ch.cz * 16 + 8, w, "chunkchange");
+        }
+    }
+
+    private double confidenceOf(Cell c) {
+        if (c.sources.size() < minSourceTypes.get()) return 0.0;
+        double k = Math.max(0.5, kSigmoid.get());
+        return 1.0 - Math.exp(-c.score / k);
+    }
+
+    public enum Tier { NONE, SUSPECT, LIKELY, CONFIRMED }
+
+    private Tier tierOf(double conf) {
+        if (conf >= tierConfirmed.get()) return Tier.CONFIRMED;
+        if (conf >= tierLikely.get())    return Tier.LIKELY;
+        if (conf >= tierSuspect.get())   return Tier.SUSPECT;
+        return Tier.NONE;
+    }
+
     private List<Cell> top(int n) {
         List<Cell> all = new ArrayList<>(cells.values());
         all.sort((a, b) -> Double.compare(b.score, a.score));
@@ -273,10 +354,23 @@ public class ActivityHeatmap extends Module {
             for (Cell c : top(topN.get())) topKeys.add(ChunkPos.toLong(c.cx, c.cz));
         }
 
+        boolean tier = tierMode.get();
         for (Cell c : cells.values()) {
             if (c.score < minS) continue;
-            float t = (float) (c.score / maxS);
-            Color col = heat(t);
+            Color col;
+            if (tier) {
+                Tier t = tierOf(confidenceOf(c));
+                if (t == Tier.NONE) continue;
+                col = switch (t) {
+                    case CONFIRMED -> colConfirmed.get();
+                    case LIKELY    -> colLikely.get();
+                    case SUSPECT   -> colSuspect.get();
+                    case NONE      -> outline.get();
+                };
+            } else {
+                float p = (float) (c.score / maxS);
+                col = heat(p);
+            }
 
             double x1 = c.cx * 16, z1 = c.cz * 16;
             double x2 = x1 + 16, z2 = z1 + 16;
@@ -308,7 +402,13 @@ public class ActivityHeatmap extends Module {
     @Override
     public String getInfoString() {
         if (cells.isEmpty()) return "0";
-        double max = cells.values().stream().mapToDouble(c -> c.score).max().orElse(0);
-        return String.format("%d c §c%.1f", cells.size(), max);
+        long c1 = 0, c2 = 0, c3 = 0;
+        for (Cell c : cells.values()) {
+            Tier t = tierOf(confidenceOf(c));
+            if (t == Tier.CONFIRMED) c3++;
+            else if (t == Tier.LIKELY) c2++;
+            else if (t == Tier.SUSPECT) c1++;
+        }
+        return String.format("§c%d§7/§6%d§7/§e%d", c3, c2, c1);
     }
 }
