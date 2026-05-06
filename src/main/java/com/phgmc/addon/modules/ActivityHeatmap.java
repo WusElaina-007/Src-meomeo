@@ -110,9 +110,21 @@ public class ActivityHeatmap extends Module {
         .name("màu-confirmed").defaultValue(new SettingColor(255, 50, 50, 240)).build());
 
     private final Setting<Boolean> renderColumns = sgRender.add(new BoolSetting.Builder()
-        .name("vẽ-cột").defaultValue(true).build());
+        .name("vẽ-cột").description("Vẽ cột Y-64→320 cho mỗi cell (gây che mặt).")
+        .defaultValue(false).build());
     private final Setting<Boolean> renderTopBox = sgRender.add(new BoolSetting.Builder()
         .name("vẽ-box-top").defaultValue(true).build());
+
+    public enum HMRenderMode { Flat, Top, Box, Off }
+
+    private final Setting<HMRenderMode> hmRenderMode = sgRender.add(new EnumSetting.Builder<HMRenderMode>()
+        .name("render-mode").defaultValue(HMRenderMode.Flat).build());
+
+    private final Setting<Integer> flatYOffset = sgRender.add(new IntSetting.Builder()
+        .name("flat-y-offset").defaultValue(0).min(-64).sliderMin(-32).sliderMax(64).build());
+
+    private final Setting<Integer> topY = sgRender.add(new IntSetting.Builder()
+        .name("top-y").defaultValue(120).min(-64).sliderMin(-64).sliderMax(320).build());
     private final Setting<SettingColor> outline = sgRender.add(new ColorSetting.Builder()
         .name("outline").defaultValue(new SettingColor(255, 255, 255, 200)).build());
     private final Setting<ShapeMode> shape = sgRender.add(new EnumSetting.Builder<ShapeMode>()
@@ -379,8 +391,15 @@ public class ActivityHeatmap extends Module {
                 e.renderer.line(x1 + 8, -64, z1 + 8, x1 + 8, 320, z1 + 8, col);
             }
 
-            if (topKeys.contains(ChunkPos.toLong(c.cx, c.cz))) {
-                e.renderer.box(x1, 60, z1, x2, 70, z2, col, o, sh, 0);
+            if (renderTopBox.get() && topKeys.contains(ChunkPos.toLong(c.cx, c.cz))) {
+                HMRenderMode rm = hmRenderMode.get();
+                double py = mc.player != null ? mc.player.getY() + flatYOffset.get() : 64;
+                switch (rm) {
+                    case Box  -> e.renderer.box(x1, -64, z1, x2, 320, z2, col, o, sh, 0);
+                    case Top  -> e.renderer.box(x1, topY.get(), z1, x2, topY.get() + 0.05, z2, col, o, sh, 0);
+                    case Flat -> e.renderer.box(x1, py, z1, x2, py + 0.05, z2, col, o, sh, 0);
+                    case Off  -> {}
+                }
             }
         }
     }

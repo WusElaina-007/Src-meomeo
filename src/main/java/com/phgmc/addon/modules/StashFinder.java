@@ -45,10 +45,24 @@ public class StashFinder extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgRender  = settings.createGroup("Hiển thị");
 
+    public enum RenderMode { Flat, Top, Box, Off }
+
     private final Setting<Integer> minStorage = sgGeneral.add(new IntSetting.Builder()
         .name("min-storage")
         .description("Số chest+shulker+hopper tối thiểu trong 1 chunk để coi là stash.")
-        .defaultValue(4).min(1).sliderMin(1).sliderMax(20)
+        .defaultValue(8).min(1).sliderMin(1).sliderMax(40)
+        .build());
+
+    private final Setting<Integer> minDistChunk = sgGeneral.add(new IntSetting.Builder()
+        .name("min-distance-chunk")
+        .description("Bỏ qua chunk gần player hơn N chunk (lọc khu của bạn).")
+        .defaultValue(3).min(0).sliderMin(0).sliderMax(32)
+        .build());
+
+    private final Setting<Integer> chatCooldown = sgGeneral.add(new IntSetting.Builder()
+        .name("chat-cooldown-giây")
+        .description("Số giây tối thiểu giữa 2 lần báo chat (per chunk).")
+        .defaultValue(60).min(0).sliderMin(0).sliderMax(600)
         .build());
 
     private final Setting<Integer> chunkLoaderAge = sgGeneral.add(new IntSetting.Builder()
@@ -97,7 +111,31 @@ public class StashFinder extends Module {
 
     private final Setting<ShapeMode> shape = sgRender.add(new EnumSetting.Builder<ShapeMode>()
         .name("kiểu-hiển-thị")
-        .defaultValue(ShapeMode.Both)
+        .defaultValue(ShapeMode.Lines)
+        .build());
+
+    private final Setting<RenderMode> renderMode = sgRender.add(new EnumSetting.Builder<RenderMode>()
+        .name("render-mode")
+        .description("Flat = ô vuông tại Y player; Top = tại Y cố định; Box = cột Y-64→320; Off = không vẽ.")
+        .defaultValue(RenderMode.Flat)
+        .build());
+
+    private final Setting<Integer> flatYOffset = sgRender.add(new IntSetting.Builder()
+        .name("flat-y-offset")
+        .description("Y offset so với player khi dùng Flat (0 = ngang chân player).")
+        .defaultValue(0).min(-64).sliderMin(-32).sliderMax(64)
+        .build());
+
+    private final Setting<Integer> topY = sgRender.add(new IntSetting.Builder()
+        .name("top-y")
+        .description("Y cố định khi dùng Top mode.")
+        .defaultValue(120).min(-64).sliderMin(-64).sliderMax(320)
+        .build());
+
+    private final Setting<Integer> maxRender = sgRender.add(new IntSetting.Builder()
+        .name("max-render")
+        .description("Chỉ vẽ N chunk gần player nhất (giảm lag/che mặt).")
+        .defaultValue(48).min(1).sliderMin(8).sliderMax(256)
         .build());
 
     private static final String WP_PREFIX = "[Stash] ";
@@ -109,6 +147,7 @@ public class StashFinder extends Module {
         public int storageCount;
         public long firstLoadedMs;
         public long lastSeenMs;
+        public long lastChatMs;
         public boolean reported;
         public boolean reportedAsLoader;
         public String dimension;
@@ -148,6 +187,11 @@ public class StashFinder extends Module {
         }
 
         if (count >= minStorage.get()) {
+            int pcx = mc.player == null ? 0 : (mc.player.getBlockX() >> 4);
+            int pcz = mc.player == null ? 0 : (mc.player.getBlockZ() >> 4);
+            int dist = Math.max(Math.abs(c.getPos().x - pcx), Math.abs(c.getPos().z - pcz));
+            if (dist < minDistChunk.get()) return;
+
             Stash s = stashes.computeIfAbsent(key, k -> {
                 Stash ns = new Stash();
                 ns.chunkKey = k;
@@ -162,7 +206,8 @@ public class StashFinder extends Module {
 
             if (!s.reported) {
                 s.reported = true;
-                if (announce.get()) {
+                if (announce.get() && now - s.lastChatMs >= chatCooldown.get() * 1000L) {
+                    s.lastChatMs = now;
                     ChatUtils.info("Stash-Finder: §c%d storage§r in chunk §e%d, %d§r (%s)",
                         s.storageCount, s.chunkX, s.chunkZ, s.dimension);
                 }
@@ -207,7 +252,8 @@ public class StashFinder extends Module {
 
             if (!s.reportedAsLoader) {
                 s.reportedAsLoader = true;
-                if (announce.get()) {
+                if (announce.get() && now - s.lastChatMs >= chatCooldown.get() * 1000L) {
+                    s.lastChatMs = now;
                     ChatUtils.info("Stash-Finder: §6chunk loader§r ở chunk §e%d, %d§r (%ds)",
                         cx, cz, (int) ((now - firstLoad) / 1000));
                 }
@@ -230,18 +276,38 @@ public class StashFinder extends Module {
     @EventHandler
     private void onRender(Render3DEvent e) {
         if (stashes.isEmpty()) return;
+        RenderMode rm = renderMode.get();
+        if (rm == RenderMode.Off) return;
         Color sc = stashCol.get();
         Color sl = stashLine.get();
         Color lc = loaderCol.get();
         Color ll = loaderLine.get();
         ShapeMode sh = shape.get();
-        for (Stash s : stashes.values()) {
+
+        double py = mc.player != null ? mc.player.getY() + flatYOffset.get() : 64;
+        int max = maxRender.get();
+        int pcx = mc.player == null ? 0 : (mc.player.getBlockX() >> 4);
+        int pcz = mc.player == null ? 0 : (mc.player.getBlockZ() >> 4);
+
+        java.util.List<Stash> visible = stashes.values().stream()
+            .filter(s -> s.reported || s.reportedAsLoader)
+            .sorted(Comparator.comparingInt(s -> {
+                int dx = s.chunkX - pcx, dz = s.chunkZ - pcz;
+                return dx * dx + dz * dz;
+            }))
+            .limit(max)
+            .collect(Collectors.toList());
+
+        for (Stash s : visible) {
             double x0 = s.chunkX * 16, z0 = s.chunkZ * 16;
             double x1 = x0 + 16, z1 = z0 + 16;
-            if (s.reported) {
-                e.renderer.box(x0, -64, z0, x1, 320, z1, sc, sl, sh, 0);
-            } else if (s.reportedAsLoader) {
-                e.renderer.box(x0, -64, z0, x1, 320, z1, lc, ll, sh, 0);
+            Color side  = s.reported ? sc : lc;
+            Color line  = s.reported ? sl : ll;
+            switch (rm) {
+                case Box -> e.renderer.box(x0, -64, z0, x1, 320, z1, side, line, sh, 0);
+                case Top -> e.renderer.box(x0, topY.get(), z0, x1, topY.get() + 0.05, z1, side, line, sh, 0);
+                case Flat -> e.renderer.box(x0, py, z0, x1, py + 0.05, z1, side, line, sh, 0);
+                default -> {}
             }
         }
     }

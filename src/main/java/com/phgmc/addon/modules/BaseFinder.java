@@ -136,7 +136,25 @@ public class BaseFinder extends Module {
         .defaultValue(new SettingColor(255, 50, 50, 140)).build());
 
     private final Setting<ShapeMode> shape = sgRender.add(new EnumSetting.Builder<ShapeMode>()
-        .name("kiểu-hiển-thị").defaultValue(ShapeMode.Both).build());
+        .name("kiểu-hiển-thị").defaultValue(ShapeMode.Lines).build());
+
+    public enum RenderMode { Flat, Top, Box, Off }
+
+    private final Setting<RenderMode> renderMode = sgRender.add(new EnumSetting.Builder<RenderMode>()
+        .name("render-mode")
+        .description("Flat = ô vuông tại Y player; Top = Y cố định; Box = cột Y-64→320; Off = không vẽ.")
+        .defaultValue(RenderMode.Flat).build());
+
+    private final Setting<Integer> flatYOffset = sgRender.add(new IntSetting.Builder()
+        .name("flat-y-offset").defaultValue(0).min(-64).sliderMin(-32).sliderMax(64).build());
+
+    private final Setting<Integer> topY = sgRender.add(new IntSetting.Builder()
+        .name("top-y").defaultValue(120).min(-64).sliderMin(-64).sliderMax(320).build());
+
+    private final Setting<Integer> maxRender = sgRender.add(new IntSetting.Builder()
+        .name("max-render")
+        .description("Chỉ vẽ N chunk gần player nhất.")
+        .defaultValue(48).min(1).sliderMin(8).sliderMax(256).build());
 
     private static final String WP_PREFIX = "[Base] ";
 
@@ -454,8 +472,23 @@ public class BaseFinder extends Module {
     @EventHandler
     private void onRender(Render3DEvent e) {
         if (bases.isEmpty()) return;
+        RenderMode rm = renderMode.get();
+        if (rm == RenderMode.Off) return;
         ShapeMode sh = shape.get();
-        for (Base b : bases.values()) {
+        double py = mc.player != null ? mc.player.getY() + flatYOffset.get() : 64;
+        int max = maxRender.get();
+        int pcx = mc.player == null ? 0 : (mc.player.getBlockX() >> 4);
+        int pcz = mc.player == null ? 0 : (mc.player.getBlockZ() >> 4);
+
+        java.util.List<Base> visible = bases.values().stream()
+            .sorted(java.util.Comparator.comparingInt(b -> {
+                int dx = b.chunkX - pcx, dz = b.chunkZ - pcz;
+                return dx * dx + dz * dz;
+            }))
+            .limit(max)
+            .toList();
+
+        for (Base b : visible) {
             Color c = switch (b.tier) {
                 case CONFIRMED -> colConfirmed.get();
                 case LIKELY    -> colLikely.get();
@@ -463,7 +496,12 @@ public class BaseFinder extends Module {
             };
             double x0 = b.chunkX * 16, z0 = b.chunkZ * 16;
             double x1 = x0 + 16, z1 = z0 + 16;
-            e.renderer.box(x0, -64, z0, x1, 320, z1, c, c, sh, 0);
+            switch (rm) {
+                case Box  -> e.renderer.box(x0, -64, z0, x1, 320, z1, c, c, sh, 0);
+                case Top  -> e.renderer.box(x0, topY.get(), z0, x1, topY.get() + 0.05, z1, c, c, sh, 0);
+                case Flat -> e.renderer.box(x0, py, z0, x1, py + 0.05, z1, c, c, sh, 0);
+                default   -> {}
+            }
         }
     }
 

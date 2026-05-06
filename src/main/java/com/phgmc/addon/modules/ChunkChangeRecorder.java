@@ -84,7 +84,24 @@ public class ChunkChangeRecorder extends Module {
         .defaultValue(new SettingColor(255, 220, 100, 220)).build());
 
     private final Setting<ShapeMode> shape = sgRender.add(new EnumSetting.Builder<ShapeMode>()
-        .name("kiểu-hiển-thị").defaultValue(ShapeMode.Both).build());
+        .name("kiểu-hiển-thị").defaultValue(ShapeMode.Lines).build());
+
+    public enum RenderMode { Flat, Top, Box, Off }
+
+    private final Setting<RenderMode> renderMode = sgRender.add(new EnumSetting.Builder<RenderMode>()
+        .name("render-mode").defaultValue(RenderMode.Flat).build());
+
+    private final Setting<Integer> flatYOffset = sgRender.add(new IntSetting.Builder()
+        .name("flat-y-offset").defaultValue(0).min(-64).sliderMin(-32).sliderMax(64).build());
+
+    private final Setting<Integer> topY = sgRender.add(new IntSetting.Builder()
+        .name("top-y").defaultValue(120).min(-64).sliderMin(-64).sliderMax(320).build());
+
+    private final Setting<Boolean> drawColumn = sgRender.add(new BoolSetting.Builder()
+        .name("vẽ-cột-dọc").defaultValue(false).build());
+
+    private final Setting<Integer> maxRender = sgRender.add(new IntSetting.Builder()
+        .name("max-render").defaultValue(48).min(1).sliderMin(8).sliderMax(256).build());
 
     public static class Snap {
         public long feHash;
@@ -231,12 +248,31 @@ public class ChunkChangeRecorder extends Module {
     @EventHandler
     private void onRender(Render3DEvent e) {
         if (visible.isEmpty()) return;
+        RenderMode rm = renderMode.get();
+        if (rm == RenderMode.Off) return;
         Color s = col.get(); Color l = line.get(); ShapeMode sh = shape.get();
-        for (Change ch : visible.values()) {
+        double py = mc.player != null ? mc.player.getY() + flatYOffset.get() : 64;
+        int pcx = mc.player == null ? 0 : (mc.player.getBlockX() >> 4);
+        int pcz = mc.player == null ? 0 : (mc.player.getBlockZ() >> 4);
+        boolean drawCol = drawColumn.get();
+
+        java.util.List<Change> list = visible.values().stream()
+            .sorted(java.util.Comparator.comparingInt(ch -> {
+                int dx = ch.cx - pcx, dz = ch.cz - pcz; return dx * dx + dz * dz;
+            }))
+            .limit(maxRender.get())
+            .toList();
+
+        for (Change ch : list) {
             double x0 = ch.cx * 16, z0 = ch.cz * 16;
             double x1 = x0 + 16, z1 = z0 + 16;
-            e.renderer.box(x0, 60, z0, x1, 75, z1, s, l, sh, 0);
-            e.renderer.line(x0 + 8, -64, z0 + 8, x0 + 8, 320, z0 + 8, l);
+            switch (rm) {
+                case Box  -> e.renderer.box(x0, -64, z0, x1, 320, z1, s, l, sh, 0);
+                case Top  -> e.renderer.box(x0, topY.get(), z0, x1, topY.get() + 0.05, z1, s, l, sh, 0);
+                case Flat -> e.renderer.box(x0, py, z0, x1, py + 0.05, z1, s, l, sh, 0);
+                default   -> {}
+            }
+            if (drawCol) e.renderer.line(x0 + 8, -64, z0 + 8, x0 + 8, 320, z0 + 8, l);
         }
     }
 
