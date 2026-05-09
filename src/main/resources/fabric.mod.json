@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "phgmc",
+  "version": "${version}",
+  "name": "PhgMC",
+  "description": "Meteor Client addon (High-Ping, Student-Aura, Pearl-Predict, Tim-Cong-Trinh).",
+  "authors": [
+    "WusElaina-007"
+  ],
+  "contact": {
+    "sources": "https://github.com/WusElaina-007/Src-meomeo"
+  },
+  "icon": "assets/phgmc/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "com.phgmc.addon.PhgMCAddon"
+    ]
+  },
+  "mixins": [
+    "phgmc.mixins.json"
+  ],
+  "depends": {
+    "java": ">=21",
+    "minecraft": "1.21.11",
+    "meteor-client": "*"
+  }
+}

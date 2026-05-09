@@ -1,6 +1,6 @@
-package com.example.addon.modules;
+package com.phgmc.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.phgmc.addon.PhgMCAddon;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
@@ -16,7 +16,7 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.decoration.ArmorStandEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.AxeItem;
-import net.minecraft.item.SwordItem;
+import net.minecraft.registry.tag.ItemTags;
 import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.util.Hand;
@@ -271,7 +271,7 @@ public class StudentAura extends Module {
     // ─── Constructor ─────────────────────────────────────────────────────────
 
     public StudentAura() {
-        super(AddonTemplate.Student_pvp, "Student-Aura", "Better Kill Aura.");
+        super(PhgMCAddon.PhgMC_PvP, "Student-Aura", "Better Kill Aura.");
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -374,9 +374,9 @@ public class StudentAura extends Module {
         if (target != null) {
             Box bb = target.getBoundingBox();
             rotPoint = new Vec3d(
-                rand(-bb.getLengthX() * 0.15f, bb.getLengthX() * 0.15f),
+                rand((float) (-bb.getLengthX() * 0.15f), (float) (bb.getLengthX() * 0.15f)),
                 bb.getLengthY() * (0.45 + random.nextDouble() * 0.2),
-                rand(-bb.getLengthZ() * 0.15f, bb.getLengthZ() * 0.15f)
+                rand((float) (-bb.getLengthZ() * 0.15f), (float) (bb.getLengthZ() * 0.15f))
             );
         } else {
             rotPoint = Vec3d.ZERO;
@@ -412,7 +412,7 @@ public class StudentAura extends Module {
             default    -> yFrac = 0.50 + random.nextDouble() * 0.15; // 50–65 % (Body)
         }
 
-        Vec3d base = target.getPos();
+        Vec3d base = new Vec3d(target.getX(), target.getY(), target.getZ());
         if (predict.get()) {
             base = base.add(target.getVelocity().multiply(predictScale.get()));
         }
@@ -449,7 +449,7 @@ public class StudentAura extends Module {
         if (rotPoint.z >  halfZ) rotMotion = new Vec3d(rotMotion.x,           rotMotion.y, -rand(minMXZ, maxMXZ));
         if (rotPoint.z < -halfZ) rotMotion = new Vec3d(rotMotion.x,           rotMotion.y,  rand(minMXZ, maxMXZ));
 
-        Vec3d base = target.getPos();
+        Vec3d base = new Vec3d(target.getX(), target.getY(), target.getZ());
         if (predict.get()) {
             base = base.add(target.getVelocity().multiply(predictScale.get()));
         }
@@ -531,10 +531,10 @@ public class StudentAura extends Module {
         // Shield breaker: silent-swap to axe when target is actively blocking
         if (shieldBreaker.get()
                 && target instanceof PlayerEntity pl
-                && pl.blockedByShield(mc.world.getDamageSources().playerAttack(mc.player))) {
+                && pl.isBlocking()) {
             int axeSlot = findAxeSlot();
             if (axeSlot != -1) {
-                int prev = mc.player.getInventory().selectedSlot;
+                int prev = mc.player.getInventory().getSelectedSlot();
                 mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(axeSlot));
                 mc.interactionManager.attackEntity(mc.player, target);
                 mc.player.swingHand(Hand.MAIN_HAND);
@@ -581,7 +581,7 @@ public class StudentAura extends Module {
 
         // FOV check: angle between player's facing and direction to entity center
         if (fov.get() < 360) {
-            Vec3d toEntity = entity.getPos()
+            Vec3d toEntity = new Vec3d(entity.getX(), entity.getY(), entity.getZ())
                 .add(0, entity.getHeight() / 2.0, 0)
                 .subtract(mc.player.getEyePos())
                 .normalize();
@@ -615,8 +615,8 @@ public class StudentAura extends Module {
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private boolean hasWeapon() {
-        var item = mc.player.getMainHandStack().getItem();
-        return item instanceof SwordItem || item instanceof AxeItem;
+        var stack = mc.player.getMainHandStack();
+        return stack.isIn(ItemTags.SWORDS) || stack.getItem() instanceof AxeItem;
     }
 
     private int findAxeSlot() {

@@ -1,6 +1,6 @@
-package com.example.addon.modules;
+package com.phgmc.addon.modules;
 
-import com.example.addon.AddonTemplate;
+import com.phgmc.addon.PhgMCAddon;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
@@ -29,6 +29,11 @@ import java.util.List;
  * Collision detection dùng world raycast từng bước.
  */
 public class PearlPredict extends Module {
+
+    private Vec3d playerPos() {
+        return new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+    }
+
 
     private final SettingGroup sgGeneral  = settings.getDefaultGroup();
     private final SettingGroup sgRender   = settings.createGroup("Render");
@@ -99,7 +104,7 @@ public class PearlPredict extends Module {
     // ─── Constructor ─────────────────────────────────────────────────────────
 
     public PearlPredict() {
-        super(AddonTemplate.Student_pvp, "Pearl-Predict", "Hiện trajectory và landing point của ender pearl.");
+        super(PhgMCAddon.PhgMC_PvP, "Pearl-Predict", "Hiện trajectory và landing point của ender pearl.");
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -146,36 +151,40 @@ public class PearlPredict extends Module {
         float pitch = mc.player.getPitch();
         float yaw   = mc.player.getYaw();
 
-        // Tính velocity ban đầu từ look direction * 1.5
-        double vx = -MathHelper.sin(yaw * MathHelper.RADIANS_PER_DEGREE)
-                  *  MathHelper.cos(pitch * MathHelper.RADIANS_PER_DEGREE) * 1.5;
-        double vy = -MathHelper.sin(pitch * MathHelper.RADIANS_PER_DEGREE) * 1.5;
-        double vz =  MathHelper.cos(yaw * MathHelper.RADIANS_PER_DEGREE)
-                  *  MathHelper.cos(pitch * MathHelper.RADIANS_PER_DEGREE) * 1.5;
+        // Direction unit vector (vanilla setVelocity computation)
+        double dx = -MathHelper.sin(yaw * MathHelper.RADIANS_PER_DEGREE)
+                  *  MathHelper.cos(pitch * MathHelper.RADIANS_PER_DEGREE);
+        double dy = -MathHelper.sin(pitch * MathHelper.RADIANS_PER_DEGREE);
+        double dz =  MathHelper.cos(yaw * MathHelper.RADIANS_PER_DEGREE)
+                  *  MathHelper.cos(pitch * MathHelper.RADIANS_PER_DEGREE);
+        double dlen = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dlen == 0) return;
+        dx /= dlen; dy /= dlen; dz /= dlen;
 
-        // Normalize rồi scale lại (cho chính xác)
-        double len = Math.sqrt(vx * vx + vy * vy + vz * vz);
-        vx = (vx / len) * 1.5;
-        vy = (vy / len) * 1.5;
-        vz = (vz / len) * 1.5;
+        double vx = dx * 1.5;
+        double vy = dy * 1.5;
+        double vz = dz * 1.5;
 
-        // Spawn position: xấp xỉ eye pos (pearl thực ra spawn gần đây)
-        Vec3d pos = mc.player.getEyePos().subtract(0, 0.1, 0);
+        // ProjectileEntity.setVelocity adds the user's velocity (excl. y when on-ground)
+        Vec3d pv = mc.player.getVelocity();
+        vx += pv.x;
+        vz += pv.z;
+        if (!mc.player.isOnGround()) vy += pv.y;
+
+        // Spawn position: vanilla spawns at (player.x, player.eyeY - 0.1, player.z)
+        Vec3d pos = new Vec3d(mc.player.getX(),
+                              mc.player.getEyeY() - 0.10000000149011612D,
+                              mc.player.getZ());
 
         trajectoryPoints.add(pos);
 
         int limit = maxTicks.get();
+        int worldBottom = mc.world.getBottomY();
+        int worldTop = worldBottom + mc.world.getHeight();
 
         for (int t = 0; t < limit; t++) {
-            // Apply physics
-            vx *= 0.99;
-            vy *= 0.99;
-            vz *= 0.99;
-            vy -= 0.03; // gravity
-
             Vec3d nextPos = pos.add(vx, vy, vz);
 
-            // Raycast để detect collision với block
             BlockHitResult hit = mc.world.raycast(new RaycastContext(
                 pos, nextPos,
                 RaycastContext.ShapeType.COLLIDER,
@@ -184,21 +193,32 @@ public class PearlPredict extends Module {
             ));
 
             if (hit.getType() == HitResult.Type.BLOCK) {
-                // Landing tại điểm hit
                 Vec3d hitPos = hit.getPos();
                 trajectoryPoints.add(hitPos);
                 landingPos = hitPos;
-                landingDistance = mc.player.getPos().distanceTo(landingPos);
+                landingDistance = playerPos().distanceTo(landingPos);
                 break;
             }
 
             trajectoryPoints.add(nextPos);
             pos = nextPos;
 
-            // Safety: dừng nếu out of world
-            if (pos.y < mc.world.getBottomY() || pos.y > mc.world.getTopY()) {
+            // Vanilla order: move → drag → gravity (per tick after move)
+            // Drag is 0.8 in water/lava, 0.99 in air. We approximate by sampling block at pos.
+            double drag = 0.99;
+            try {
+                BlockState bs = mc.world.getBlockState(BlockPos.ofFloored(pos));
+                if (!bs.getFluidState().isEmpty()) drag = 0.8;
+            } catch (Throwable ignored) {}
+
+            vx *= drag;
+            vy *= drag;
+            vz *= drag;
+            vy -= 0.03; // pearl gravity
+
+            if (pos.y < worldBottom - 64 || pos.y > worldTop + 64) {
                 landingPos = pos;
-                landingDistance = mc.player.getPos().distanceTo(landingPos);
+                landingDistance = playerPos().distanceTo(landingPos);
                 break;
             }
         }
